@@ -2,35 +2,46 @@
 #include "linmath.h"
 #include <math.h>
 #include <cmath>
+#include <chrono>
+#include <thread>
 #define TRAIL_LENGTH 20
+#define REFRESH_RATE 1000 // Hz. Improves physics accuracy or might fuck up if computer too slow
 
+// Position for object
 struct Position {
     float x;
     float y;
 };
 
+// Velocity for object
 struct Velocity {
     float x;
     float y;
 };
 
+// Acceleration for object
 struct Acceleration {
     float x;
     float y;
 };
 
+//Physical Object
 struct Object {
+    // Physical location and movement
     Position position;
     Velocity velocity;
     Acceleration acceleration;
+    // Properties
     float mass;
     float r;
     float g;
     float b;
+    // Trail
     Position trail[TRAIL_LENGTH];
     int trailIndex;
 };
 
+// Draw a cube
 void drawDude(GLfloat r, GLfloat g, GLfloat b, GLfloat rad, GLfloat posx, GLfloat posy) {
     glColor3f(r,g,b);
     glPointSize(rad);
@@ -39,6 +50,7 @@ void drawDude(GLfloat r, GLfloat g, GLfloat b, GLfloat rad, GLfloat posx, GLfloa
     glEnd();
 }
 
+// Calculate acceleration due to gravity between two objects, acceleration for first object is returned
 Acceleration gravity(Object object1, Object object2) {
     float G = 6.6743f * pow(10, -11);
     float r = sqrt(pow(object1.position.x - object2.position.x, 2) + pow(object1.position.y - object2.position.y, 2));
@@ -52,7 +64,7 @@ Acceleration gravity(Object object1, Object object2) {
 
 };
 
-
+// Draw trail
 void drawTrail(Object obj) {
     for (int i = 0; i < TRAIL_LENGTH; i++) {
         int index = (obj.trailIndex - i - 1 + TRAIL_LENGTH) % TRAIL_LENGTH;
@@ -86,6 +98,7 @@ int main() {
     // Make the window's context current
     glfwMakeContextCurrent(window);
 
+    // Make two objects
     Object obj1;
     Object obj2;
 
@@ -118,7 +131,7 @@ int main() {
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
 
-        float last_time = (float)glfwGetTime();
+
 
         // Clear the screen to black
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -128,15 +141,16 @@ int main() {
         obj1.acceleration = gravity(obj1, obj2);
         obj2.acceleration = gravity(obj2, obj1);
 
-        // Get the time taken between frames
-        float time = (float)glfwGetTime();
-        float delta_time = time - last_time;
+        // Time taken between frames
+        float delta_time = 1.0f / REFRESH_RATE;
 
+        // Calculate velocity from acceleration
         obj1.velocity.x = obj1.velocity.x + obj1.acceleration.x * delta_time;
         obj1.velocity.y = obj1.velocity.y + obj1.acceleration.y * delta_time;
         obj2.velocity.x = obj2.velocity.x + obj2.acceleration.x * delta_time;
         obj2.velocity.y = obj2.velocity.y + obj2.acceleration.y * delta_time;
 
+        // Calculate position form velocity
         obj1.position.x = obj1.position.x + obj1.velocity.x * delta_time;
         obj1.position.y = obj1.position.y + obj1.velocity.y * delta_time;
         obj2.position.x = obj2.position.x + obj2.velocity.x * delta_time;
@@ -193,6 +207,9 @@ int main() {
 
         // Poll for and process events
         glfwPollEvents();
+
+        // Refresh rate pause
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
 
     }
 
