@@ -1,0 +1,5 @@
+.gitignore
+cmake-build-debug
+.vs
+out
+.idea
