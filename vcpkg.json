@@ -1,0 +1,33 @@
+{
+  "name" : "physik",
+  "version-string" : "1.0.0",
+  "builtin-baseline" : "c202ce4d469096bd6d46fe65de74a4737beee01b",
+  "dependencies" : [ {
+    "name" : "egl-registry",
+    "version>=" : "2024-01-25"
+  }, {
+    "name" : "glfw3",
+    "version>=" : "3.4"
+  }, {
+    "name" : "opengl-registry",
+    "version>=" : "2024-02-10#1"
+  }, {
+    "name" : "opengl",
+    "version>=" : "2022-12-04#3"
+  }, {
+    "name" : "vcpkg-cmake-config",
+    "version>=" : "2024-05-23"
+  }, {
+    "name" : "vcpkg-cmake",
+    "version>=" : "2024-04-23"
+  }, {
+    "name" : "glew",
+    "version>=" : "2.2.0#3"
+  }, {
+    "name" : "glad",
+    "version>=" : "0.1.36"
+  }, {
+    "name" : "linmath",
+    "version>=" : "2022-07-30"
+  } ]
+}
