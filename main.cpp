@@ -3,9 +3,13 @@
 #include <math.h>
 #include <cmath>
 #include <chrono>
+#include <iterator>
 #include <thread>
+#include <vector>
 #define TRAIL_LENGTH 20
 #define REFRESH_RATE 1000 // Hz. Improves physics accuracy or might fuck up if computer too slow
+
+
 
 // Position for object
 struct Position {
@@ -51,18 +55,30 @@ void drawDude(GLfloat r, GLfloat g, GLfloat b, GLfloat rad, GLfloat posx, GLfloa
 }
 
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Acceleration gravity(Object object1, Object object2) {
-    float G = 6.6743f * pow(10, -11);
-    float r = sqrt(pow(object1.position.x - object2.position.x, 2) + pow(object1.position.y - object2.position.y, 2));
-    float base = G * object2.mass / pow(r, 3);
+Acceleration gravity(Object object1, const std::vector<Object>& objects) {
+    const float G = 6.6743e-11f; // Gravitational constant
+    Acceleration totalAcceleration = {0.0f, 0.0f};
 
-    Acceleration acceleration;
-    acceleration.x = base * (object2.position.x - object1.position.x);
-    acceleration.y = base * (object2.position.y - object1.position.y);
+    for (const auto& object2 : objects) {
+        // Skip if it's the same object
+        if (&object1 == &object2) continue;
 
-    return acceleration;
+        float dx = object2.position.x - object1.position.x;
+        float dy = object2.position.y - object1.position.y;
+        float r2 = dx*dx + dy*dy;
+        float r = std::sqrt(r2);
 
-};
+        // Avoid division by zero
+        if (r < 1e-6f) continue;
+
+        float force = G * object2.mass / (r2 * r);
+
+        totalAcceleration.x += force * dx;
+        totalAcceleration.y += force * dy;
+    }
+
+    return totalAcceleration;
+}
 
 // Draw trail
 void drawTrail(Object obj) {
@@ -101,6 +117,7 @@ int main() {
     // Make two objects
     Object obj1;
     Object obj2;
+    Object obj3;
 
     obj1.position.x = 0.5f;
     obj1.position.y = 0.6f;
@@ -128,6 +145,19 @@ int main() {
     obj2.trailIndex = 0;
     obj2.trail[obj2.trailIndex] = obj2.position;
 
+    obj3.position.x = 0.0f;
+    obj3.position.y = 0.5f;
+    obj3.velocity.x = 0.0f;
+    obj3.velocity.y = 0.0f;
+    obj3.acceleration.x = 0.0f;
+    obj3.acceleration.y = 0.0f;
+    obj3.mass = 10000000000.0f;
+    obj3.r = 1.0f;
+    obj3.g = 0.0f;
+    obj3.b = 0.0f;
+    obj3.trailIndex = 0;
+    obj3.trail[obj2.trailIndex] = obj2.position;
+
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
 
@@ -138,8 +168,9 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Update the gravity acceleration of both objects
-        obj1.acceleration = gravity(obj1, obj2);
-        obj2.acceleration = gravity(obj2, obj1);
+        std::vector<Object> allObjects = {obj1, obj2, obj3};
+        obj1.acceleration = gravity(obj1, allObjects);
+        obj2.acceleration = gravity(obj2, allObjects);
 
         // Time taken between frames
         float delta_time = 1.0f / REFRESH_RATE;
@@ -200,7 +231,25 @@ int main() {
         // Draw a white point
         drawDude(obj2.r,obj2.g,obj2.b, 10.0f, 0.0f, 0.0f);
 
+        // OBJECT 3
 
+        // Store current position in trail
+        obj3.trail[obj3.trailIndex] = obj3.position;
+        obj3.trailIndex = (obj3.trailIndex + 1) % TRAIL_LENGTH;
+
+        // Draw trail
+        drawTrail(obj3);
+
+        // Draw current position (main dot)
+        mat4x4_identity(mvp);
+        mat4x4_translate(mvp, obj3.position.x, obj3.position.y, 0.0f);
+
+        // apply the mvp matrix
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glMultMatrixf((const GLfloat*)mvp);
+        // Draw a white point
+        drawDude(obj3.r,obj3.g,obj3.b, 10.0f, 0.0f, 0.0f);
 
         // Swap front and back buffers
         glfwSwapBuffers(window);
@@ -217,3 +266,15 @@ int main() {
     return 0;
 }
 
+/*
+ * arity: 3
+ * C(I(Z,Z), C(P1,P3,P2), Z)
+ *
+ * C(I(Z,Z), C(P1,P3,P2), Z)(x,y,z)
+ * I(Z,Z)(C(P1,P3,P2), Z)(x,y,z)
+ * I(Z,Z)(P1(P3,P2), Z)(x,y,z)
+ * I(Z,Z)(P1(P3,P2)(x,y,z), Z(x,y,z))
+ * BASE CASE: I(Z,Z)(0, Z(x,y,z)) = Z(Z(x,y,z)) = 0
+ * RECURSIVE CASE: I(Z,Z)(P1(P3,P2)(x,y,z), Z(x,y,z))
+ * = Z(I(Z,Z)(P1(P3,P2)(x,y,z), Z(x,y,z), P1(P3,P2)(x,y,z), Z(x,y,z)) = 0,
+*/

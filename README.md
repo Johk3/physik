@@ -1,5 +1,5 @@
 # Small scale physics engine
-This project demonstrates a simple OpenGL application using GLFW3 and GLEW. It currently only displays a moving white dot that leaves a trail as it moves in a circular pattern.
+This project demonstrates a simple OpenGL application using GLFW3 and GLEW. It currently only displays N-body 2D physics.
 
 ## Dependencies
 
