@@ -54,6 +54,8 @@ void drawDude(GLfloat r, GLfloat g, GLfloat b, GLfloat rad, GLfloat posx, GLfloa
     glEnd();
 }
 
+
+
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
 Acceleration gravity(Object object1, const std::vector<Object>& objects) {
     const float G = 6.6743e-11f; // Gravitational constant
@@ -80,6 +82,18 @@ Acceleration gravity(Object object1, const std::vector<Object>& objects) {
     return totalAcceleration;
 }
 
+// Updates the physical state of an object over a given time step
+void updateObject(Object& obj, const std::vector<Object>& allObjects, float delta_time) {
+    obj.acceleration = gravity(obj, allObjects);
+    obj.velocity.x += obj.acceleration.x * delta_time;
+    obj.velocity.y += obj.acceleration.y * delta_time;
+    obj.position.x += obj.velocity.x * delta_time;
+    obj.position.y += obj.velocity.y * delta_time;
+
+    // Update the object's trail for rendering motion trail
+    obj.trail[obj.trailIndex] = obj.position;
+    obj.trailIndex = (obj.trailIndex + 1) % TRAIL_LENGTH;
+}
 // Draw trail
 void drawTrail(Object obj) {
     for (int i = 0; i < TRAIL_LENGTH; i++) {
@@ -96,6 +110,22 @@ void drawTrail(Object obj) {
 
         drawDude(obj.r, obj.g, obj.b, 5.0f * alpha, 0.0f, 0.0f);
     }
+}
+
+// Draws an object and its trail on the screen
+void drawObject(const Object& obj) {
+    drawTrail(obj);
+
+    // Set up the model-view-projection matrix for the object
+    mat4x4 mvp;
+    mat4x4_identity(mvp);
+    mat4x4_translate(mvp, obj.position.x, obj.position.y, 0.0f);
+
+    // Apply the transformation and draw the object
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glMultMatrixf((const GLfloat*)mvp);
+    drawDude(obj.r, obj.g, obj.b, 10.0f, 0.0f, 0.0f);
 }
 
 int main() {
@@ -125,7 +155,7 @@ int main() {
     obj1.velocity.y = 0.0f;
     obj1.acceleration.x = 0.0f;
     obj1.acceleration.y = 0.0f;
-    obj1.mass = 100.0f;
+    obj1.mass = 10.0f;
     obj1.r = 0.0f;
     obj1.g = 0.0f;
     obj1.b = 1.0f;
@@ -146,7 +176,7 @@ int main() {
     obj2.trail[obj2.trailIndex] = obj2.position;
 
     obj3.position.x = 0.0f;
-    obj3.position.y = 0.5f;
+    obj3.position.y = -0.3f;
     obj3.velocity.x = 0.0f;
     obj3.velocity.y = 0.0f;
     obj3.acceleration.x = 0.0f;
@@ -157,109 +187,32 @@ int main() {
     obj3.b = 0.0f;
     obj3.trailIndex = 0;
     obj3.trail[obj2.trailIndex] = obj2.position;
+    std::vector<Object> allObjects = {obj1, obj2, obj3};
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
-
-
-
-        // Clear the screen to black
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Update the gravity acceleration of both objects
-        std::vector<Object> allObjects = {obj1, obj2, obj3};
-        obj1.acceleration = gravity(obj1, allObjects);
-        obj2.acceleration = gravity(obj2, allObjects);
-
-        // Time taken between frames
         float delta_time = 1.0f / REFRESH_RATE;
 
-        // Calculate velocity from acceleration
-        obj1.velocity.x = obj1.velocity.x + obj1.acceleration.x * delta_time;
-        obj1.velocity.y = obj1.velocity.y + obj1.acceleration.y * delta_time;
-        obj2.velocity.x = obj2.velocity.x + obj2.acceleration.x * delta_time;
-        obj2.velocity.y = obj2.velocity.y + obj2.acceleration.y * delta_time;
+        // Update all objects
+        for (auto& obj : allObjects) {
+            updateObject(obj, allObjects, delta_time);
+        }
 
-        // Calculate position form velocity
-        obj1.position.x = obj1.position.x + obj1.velocity.x * delta_time;
-        obj1.position.y = obj1.position.y + obj1.velocity.y * delta_time;
-        obj2.position.x = obj2.position.x + obj2.velocity.x * delta_time;
-        obj2.position.y = obj2.position.y + obj2.velocity.y * delta_time;
+        // Draw all objects
+        for (const auto& obj : allObjects) {
+            drawObject(obj);
+        }
 
-
-        // Draw both objects and their trails
-
-        // OBJECT 1
-
-        // Store current position in trail
-        obj1.trail[obj1.trailIndex] = obj1.position;
-        obj1.trailIndex = (obj1.trailIndex + 1) % TRAIL_LENGTH;
-
-        // Draw trail
-        drawTrail(obj1);
-
-        // Draw current position (main dot)
-        mat4x4 mvp;
-        mat4x4_identity(mvp);
-        mat4x4_translate(mvp, obj1.position.x, obj1.position.y, 0.0f);
-
-        // apply the mvp matrix
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glMultMatrixf((const GLfloat*)mvp);
-        // Draw a white point
-        drawDude(obj1.r,obj1.g,obj1.b, 10.0f, 0.0f, 0.0f);
-
-        // OBJECT 2
-
-        // Store current position in trail
-        obj2.trail[obj2.trailIndex] = obj2.position;
-        obj2.trailIndex = (obj2.trailIndex + 1) % TRAIL_LENGTH;
-
-        // Draw trail
-        drawTrail(obj2);
-
-        // Draw current position (main dot)
-        mat4x4_identity(mvp);
-        mat4x4_translate(mvp, obj2.position.x, obj2.position.y, 0.0f);
-
-        // apply the mvp matrix
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glMultMatrixf((const GLfloat*)mvp);
-        // Draw a white point
-        drawDude(obj2.r,obj2.g,obj2.b, 10.0f, 0.0f, 0.0f);
-
-        // OBJECT 3
-
-        // Store current position in trail
-        obj3.trail[obj3.trailIndex] = obj3.position;
-        obj3.trailIndex = (obj3.trailIndex + 1) % TRAIL_LENGTH;
-
-        // Draw trail
-        drawTrail(obj3);
-
-        // Draw current position (main dot)
-        mat4x4_identity(mvp);
-        mat4x4_translate(mvp, obj3.position.x, obj3.position.y, 0.0f);
-
-        // apply the mvp matrix
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glMultMatrixf((const GLfloat*)mvp);
-        // Draw a white point
-        drawDude(obj3.r,obj3.g,obj3.b, 10.0f, 0.0f, 0.0f);
-
-        // Swap front and back buffers
+        // Swap the back buffer with the front
         glfwSwapBuffers(window);
-
-        // Poll for and process events
+        // Listen for any events
         glfwPollEvents();
 
-        // Refresh rate pause
+        // Set the refresh rate
         std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
-
     }
 
     glfwTerminate();
