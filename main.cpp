@@ -6,46 +6,76 @@
 #include <iterator>
 #include <thread>
 #include <vector>
-#define TRAIL_LENGTH 20
+#define TRAIL_RADIUS 2.0f
 #define CONST_RADIUS 10.0f
 #define REFRESH_RATE 1000 // Hz. Improves physics accuracy or might fuck up if computer too slow
 
 
+struct Vector2 {
+    double x, y;
+    // Vector operations which can be performed locally
+    Vector2 operator-(const Vector2& other) const {
+        return {x - other.x, y - other.y};
+    }
 
-// Position for object
-struct Position {
-    double x;
-    double y;
-};
+    Vector2 operator+(const Vector2& other) const {
+        return {x + other.x, y + other.y};
+    }
 
-// Velocity for object
-struct Velocity {
-    double x;
-    double y;
-};
+    Vector2 operator*(float scalar) const {
+        return {x * scalar, y * scalar};
+    }
 
-// Acceleration for object
-struct Acceleration {
-    double x;
-    double y;
+    double length() const {
+        return std::sqrt(x*x + y*y);
+    }
 };
 
 //Physical Object
 struct Object {
     // Physical location and movement
-    Position position;
-    Velocity velocity;
-    Acceleration acceleration;
+    Vector2 position;
+    Vector2 velocity;
+    Vector2 acceleration;
     // Properties
     double mass;
-    double r;
-    double g;
-    double b;
+    double r,g,b;
     double radius;
     // Trail
-    Position trail[TRAIL_LENGTH];
-    int trailIndex;
+    std::vector<Vector2> trail;
+    static constexpr double TRAIL_SPACING = 0.02f;  // Fixed distance between trail dots
+    static constexpr size_t MAX_TRAIL_LENGTH = 30;  // Maximum number of trail dots
 };
+
+void updateObjectTrail(Object& obj) {
+    if (obj.trail.empty()) {
+        obj.trail.push_back(obj.position);
+        return;
+    }
+
+    Vector2 lastPosition = obj.trail.back();
+    Vector2 diff = obj.position - lastPosition;
+    double distance = diff.length();
+
+    if (distance >= Object::TRAIL_SPACING) {
+        // Calculate how many new dots we need to add
+        int numNewDots = static_cast<int>(distance / Object::TRAIL_SPACING);
+
+        for (int i = 0; i < numNewDots; ++i) {
+            double t = (i + 1) * Object::TRAIL_SPACING / distance;
+            Vector2 newDotPosition = {
+                lastPosition.x + diff.x * t,
+                lastPosition.y + diff.y * t
+            };
+            obj.trail.push_back(newDotPosition);
+
+            // Remove oldest dot if we exceed the maximum trail length
+            if (obj.trail.size() > Object::MAX_TRAIL_LENGTH) {
+                obj.trail.erase(obj.trail.begin());
+            }
+        }
+    }
+}
 
 bool checkCollision(const Object& obj1, const Object& obj2) {
     double dx = obj1.position.x - obj2.position.x;
@@ -106,29 +136,17 @@ void handleCollision(Object& obj1, Object& obj2) {
     obj2.velocity.y += perturbation * (rand() / (float)RAND_MAX - 0.5f);
 }
 
-// Draw a cube
-void drawDude(GLfloat r, GLfloat g, GLfloat b, GLfloat rad, GLfloat posx, GLfloat posy) {
-    glColor3f(r,g,b);
-    glPointSize(rad);
-    glBegin(GL_POINTS);
-    glVertex2f(posx, posy);
-    glEnd();
-}
-
-
-
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Acceleration gravity(Object object1, const std::vector<Object>& objects) {
+Vector2 gravity(Object object1, const std::vector<Object>& objects) {
     const double G = 6.6743e-11f; // Gravitational constant
-    Acceleration totalAcceleration = {0.0f, 0.0f};
+    Vector2 totalAcceleration = {0.0f, 0.0f};
 
     for (const auto& object2 : objects) {
         // Skip if it's the same object
         if (&object1 == &object2) continue;
 
-        double dx = object2.position.x - object1.position.x;
-        double dy = object2.position.y - object1.position.y;
-        double r2 = dx*dx + dy*dy;
+        Vector2 diff = object2.position - object1.position;
+        double r2 = diff.x * diff.x + diff.y * diff.y;
         double r = std::sqrt(r2);
 
         // Avoid division by zero
@@ -137,61 +155,54 @@ Acceleration gravity(Object object1, const std::vector<Object>& objects) {
         double force = G * object2.mass / (r2 * r);
 
         // Avoid teleporatation due to obscene force
-        double MAX_FORCE = 1000.0f;
+        double MAX_FORCE = 10000.0f;
         force = std::min(force, MAX_FORCE);
 
-        totalAcceleration.x += force * dx;
-        totalAcceleration.y += force * dy;
+        totalAcceleration = totalAcceleration + diff * force;
     }
 
     return totalAcceleration;
 }
 
 // Updates the physical state of an object over a given time step
-void updateObject(Object& obj, const std::vector<Object>& allObjects, float delta_time) {
+void updateObject(Object& obj, const std::vector<Object>& allObjects, double delta_time) {
     obj.acceleration = gravity(obj, allObjects);
-    obj.velocity.x += obj.acceleration.x * delta_time;
-    obj.velocity.y += obj.acceleration.y * delta_time;
-    obj.position.x += obj.velocity.x * delta_time;
-    obj.position.y += obj.velocity.y * delta_time;
+    obj.velocity = obj.velocity + obj.acceleration * delta_time;
+    obj.position = obj.position + obj.velocity * delta_time;
 
     // Update the object's trail for rendering motion trail
-    obj.trail[obj.trailIndex] = obj.position;
-    obj.trailIndex = (obj.trailIndex + 1) % TRAIL_LENGTH;
+    updateObjectTrail(obj);
 }
-// Draw trail
-void drawTrail(Object obj) {
-    for (int i = 0; i < TRAIL_LENGTH; i++) {
-        int index = (obj.trailIndex - i - 1 + TRAIL_LENGTH) % TRAIL_LENGTH;
-        double alpha = 1.0f - (double)i / TRAIL_LENGTH;
 
-        mat4x4 mvp;
-        mat4x4_identity(mvp);
-        mat4x4_translate(mvp, obj.trail[index].x, obj.trail[index].y, 0.0f);
+void drawDot(double x, double y, double r, double g, double b, double alpha, double size) {
+    mat4x4 mvp;
+    mat4x4_identity(mvp);
+    mat4x4_translate(mvp, x, y, 0.0f);
 
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glMultMatrixf((const GLfloat*)mvp);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glMultMatrixf((const GLfloat*)mvp);
 
-        drawDude(obj.r, obj.g, obj.b, 5.0f * alpha, 0.0f, 0.0f);
-    }
+    glColor4f(r, g, b, alpha);
+    glPointSize(size);
+    glBegin(GL_POINTS);
+    glVertex2f(0.0f, 0.0f);
+    glEnd();
 }
 
 // Draws an object and its trail on the screen
 void drawObject(const Object& obj) {
-    drawTrail(obj);
+    // Draw trail
+    for (size_t i = 0; i < obj.trail.size(); ++i) {
+        double alpha = static_cast<double>(i) / obj.trail.size();
+        drawDot(obj.trail[i].x, obj.trail[i].y, obj.r, obj.g, obj.b, alpha, TRAIL_RADIUS);
+    }
 
-    // Set up the model-view-projection matrix for the object
-    mat4x4 mvp;
-    mat4x4_identity(mvp);
-    mat4x4_translate(mvp, obj.position.x, obj.position.y, 0.0f);
-
-    // Apply the transformation and draw the object
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glMultMatrixf((const GLfloat*)mvp);
-    drawDude(obj.r, obj.g, obj.b, CONST_RADIUS, 0.0f, 0.0f);
+    // Draw main object
+    drawDot(obj.position.x, obj.position.y, obj.r, obj.g, obj.b, 1.0f, CONST_RADIUS);
 }
+
+
 
 int main() {
     // Initialize GLFW
@@ -210,9 +221,7 @@ int main() {
     glfwMakeContextCurrent(window);
 
     // Make two objects
-    Object obj1;
-    Object obj2;
-    Object obj3;
+    Object obj1, obj2, obj3, obj4, obj5, obj6;
 
     obj1.position.x = 0.5f;
     obj1.position.y = 0.6f;
@@ -222,25 +231,21 @@ int main() {
     obj1.acceleration.y = 0.0f;
     obj1.mass = 10.0f;
     obj1.r = 0.0f;
-    obj1.g = 0.0f;
-    obj1.b = 1.0f;
+    obj1.g = 1.0f;
+    obj1.b = 0.0f;
     obj1.radius = CONST_RADIUS/1000;
-    obj1.trailIndex = 0;
-    obj1.trail[obj1.trailIndex] = obj1.position;
 
-    obj2.position.x = 0.5f;
-    obj2.position.y = 0.5f;
+    obj2.position.x = 0.0f;
+    obj2.position.y = 0.0f;
     obj2.velocity.x = 0.0f;
     obj2.velocity.y = 0.0f;
     obj2.acceleration.x = 0.0f;
     obj2.acceleration.y = 0.0f;
-    obj2.mass = 10000000000.0f;
-    obj2.r = 1.0f;
-    obj2.g = 0.0f;
-    obj2.b = 0.0f;
+    obj2.mass = 100000000000.0f;
+    obj2.r = 0.3f;
+    obj2.g = 0.8f;
+    obj2.b = 1.0f;
     obj2.radius = CONST_RADIUS/1000;
-    obj2.trailIndex = 0;
-    obj2.trail[obj2.trailIndex] = obj2.position;
 
     obj3.position.x = 0.3f;
     obj3.position.y = 0.2f;
@@ -253,9 +258,43 @@ int main() {
     obj3.g = 0.0f;
     obj3.b = 0.0f;
     obj3.radius = CONST_RADIUS/1000;
-    obj3.trailIndex = 0;
-    obj3.trail[obj2.trailIndex] = obj2.position;
-    std::vector<Object> allObjects = {obj1, obj2, obj3};
+
+    obj4.position.x = 0.2f;
+    obj4.position.y = 0.4f;
+    obj4.velocity.x = -1.0f;
+    obj4.velocity.y = 0.0f;
+    obj4.acceleration.x = 0.0f;
+    obj4.acceleration.y = 0.0f;
+    obj4.mass = 10.0f;
+    obj4.r = 0.0f;
+    obj4.g = 1.0f;
+    obj4.b = 0.0f;
+    obj4.radius = CONST_RADIUS/1000;
+
+    obj5.position.x = 0.1f;
+    obj5.position.y = -0.5f;
+    obj5.velocity.x = 0.0f;
+    obj5.velocity.y = 0.0f;
+    obj5.acceleration.x = 0.0f;
+    obj5.acceleration.y = 0.0f;
+    obj5.mass = 100.0f;
+    obj5.r = 0.3f;
+    obj5.g = 0.8f;
+    obj5.b = 1.0f;
+    obj5.radius = CONST_RADIUS/1000;
+
+    obj6.position.x = -0.3f;
+    obj6.position.y = 0.0f;
+    obj6.velocity.x = 0.0f;
+    obj6.velocity.y = 0.0f;
+    obj6.acceleration.x = 0.0f;
+    obj6.acceleration.y = 0.0f;
+    obj6.mass = 10000.0f;
+    obj6.r = 1.0f;
+    obj6.g = 0.0f;
+    obj6.b = 0.0f;
+    obj6.radius = CONST_RADIUS/1000;
+    std::vector<Object> allObjects = {obj1, obj2, obj3, obj4, obj5, obj6};
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
