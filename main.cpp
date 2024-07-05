@@ -8,6 +8,7 @@
 #include <vector>
 #include <iostream>
 #define TRAIL_RADIUS 2.0f
+#define TRAIL_LENGTH 30
 #define CONST_RADIUS 10.0f
 #define SCALE_FACTOR 5 // used to scale all objects
 #define REFRESH_RATE 1000 // Hz. Improves physics accuracy or might fuck up if computer too slow
@@ -50,8 +51,8 @@ struct Object {
 
     // Trail
     std::vector<Vector2> trail;
-    static constexpr double TRAIL_SPACING = 0.02f;  // Fixed distance between trail dots
-    static constexpr size_t MAX_TRAIL_LENGTH = 20;  // Maximum number of trail dots
+    static constexpr double TRAIL_SPACING = 0.01f;  // Fixed distance between trail dots
+    static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
 };
 
 void updateObjectTrail(Object& obj) {
@@ -215,6 +216,15 @@ void update_radius(Object& obj) {
 
 };
 
+//Used to set the color of an object
+void set_color(Object& obj, double r, double g, double b) {
+
+    obj.r = r;
+    obj.g = g;
+    obj.b = b;
+
+}
+
 int main() {
     // Initialize GLFW
     if (!glfwInit()) {
@@ -236,66 +246,40 @@ int main() {
     obj1.position.x = 0.6f;
     obj1.velocity.x = -2.0f;
     obj1.mass = 1000.0f;
-    obj1.r = 0.0f;
-    obj1.b = 0.0f;
+    obj1.density = 0.01;
     update_radius(obj1);
+    set_color(obj1, 0.0, 0.0, 1.0);
 
     obj2.position.x = 0.0f;
     obj2.velocity.x = 2.0f;
     obj2.mass = 1000.0f;
     obj2.density = 0.01;
-    obj2.r = 0.3f;
-    obj2.g = 0.8f;
-    obj2.b = 1.0f;
     update_radius(obj2);
+    set_color(obj2, 0.0, 0.8, 0.0);
 
 
     obj3.position.x = 0.3f;
     obj3.position.y = 0.2f;
     obj3.mass = 10000000000.0f;
     obj3.density = 1000.0;
-    obj3.g = 0.0f;
-    obj3.b = 0.0f;
     update_radius(obj3);
-
-    std::cout << obj3.radius;
+    set_color(obj3, 0.8, 0.1, 0.1);
 
     obj4.position.x = 0.2f;
     obj4.position.y = 0.4f;
     obj4.velocity.x = -1.0f;
-    obj4.velocity.y = 0.0f;
-    obj4.acceleration.x = 0.0f;
-    obj4.acceleration.y = 0.0f;
-    obj4.mass = 10.0f;
-    obj4.r = 0.0f;
-    obj4.g = 1.0f;
-    obj4.b = 0.0f;
-    obj4.radius = CONST_RADIUS/1000;
+    obj4.mass = 10000000000.0f;
+    obj4.density = 10;
+    update_radius(obj4);
+    set_color(obj4, 0.3, 0.3, 0.3);
 
-    obj5.position.x = 0.1f;
-    obj5.position.y = -0.5f;
-    obj5.velocity.x = 0.0f;
-    obj5.velocity.y = 0.0f;
-    obj5.acceleration.x = 0.0f;
-    obj5.acceleration.y = 0.0f;
-    obj5.mass = 100.0f;
-    obj5.r = 0.3f;
-    obj5.g = 0.8f;
-    obj5.b = 1.0f;
-    obj5.radius = CONST_RADIUS/1000;
+    obj5.position.x = 0.1;
+    obj5.mass = 100000000;
+    obj5.velocity = {1.0, 0.4};
+    obj6.position.x = -0.4;
 
-    obj6.position.x = -0.3f;
-    obj6.position.y = 0.0f;
-    obj6.velocity.x = 0.0f;
-    obj6.velocity.y = 0.0f;
-    obj6.acceleration.x = 0.0f;
-    obj6.acceleration.y = 0.0f;
-    obj6.mass = 10000.0f;
-    obj6.r = 1.0f;
-    obj6.g = 0.0f;
-    obj6.b = 0.0f;
-    obj6.radius = CONST_RADIUS/1000;
-    std::vector<Object> allObjects = {obj1, obj2, obj3};
+
+    std::vector<Object> allObjects = {obj1, obj2, obj3, obj4, obj5, obj6};
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
