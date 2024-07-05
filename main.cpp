@@ -85,55 +85,54 @@ bool checkCollision(const Object& obj1, const Object& obj2) {
 }
 
 void handleCollision(Object& obj1, Object& obj2) {
-    // Calculate normal vector
-    double nx = obj2.position.x - obj1.position.x;
-    double ny = obj2.position.y - obj1.position.y;
-    double dist = std::sqrt(nx*nx + ny*ny);
-    nx /= dist;
-    ny /= dist;
+    // Calculate vector from obj1 to obj2
+    Vector2 delta = {obj2.position.x - obj1.position.x, obj2.position.y - obj1.position.y};
+    float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+
+    // Normalize the delta vector
+    Vector2 normal = {delta.x / distance, delta.y / distance};
 
     // Calculate relative velocity
-    double vx = obj1.velocity.x - obj2.velocity.x;
-    double vy = obj1.velocity.y - obj2.velocity.y;
+    Vector2 relativeVelocity = {
+        obj2.velocity.x - obj1.velocity.x,
+        obj2.velocity.y - obj1.velocity.y
+    };
 
-    // Calculate relative velocity in terms of the normal direction
-    double velocityAlongNormal = vx * nx + vy * ny;
+    // Calculate relative velocity along the normal
+    float velocityAlongNormal = relativeVelocity.x * normal.x + relativeVelocity.y * normal.y;
 
     // Do not resolve if velocities are separating
     if (velocityAlongNormal > 0)
         return;
 
     // Calculate restitution (bounce factor)
-    double restitution = 0.8f;
+    float restitution = 0.8f;
 
     // Calculate impulse scalar
-    double impulseScalar = -(1 + restitution) * velocityAlongNormal;
+    float impulseScalar = -(1 + restitution) * velocityAlongNormal;
     impulseScalar /= 1/obj1.mass + 1/obj2.mass;
 
     // Apply impulse
-    double impulseX = impulseScalar * nx;
-    double impulseY = impulseScalar * ny;
+    Vector2 impulse = {impulseScalar * normal.x, impulseScalar * normal.y};
 
-    obj1.velocity.x += impulseX / obj1.mass;
-    obj1.velocity.y += impulseY / obj1.mass;
-    obj2.velocity.x -= impulseX / obj2.mass;
-    obj2.velocity.y -= impulseY / obj2.mass;
+    // Update velocities
+    obj1.velocity.x -= impulse.x / obj1.mass;
+    obj1.velocity.y -= impulse.y / obj1.mass;
+    obj2.velocity.x += impulse.x / obj2.mass;
+    obj2.velocity.y += impulse.y / obj2.mass;
 
-    // Separate the objects to prevent sticking
-    double overlap = (obj1.radius + obj2.radius) - dist;
-    double separationX = overlap * nx * 0.5f;
-    double separationY = overlap * ny * 0.5f;
-    obj1.position.x -= separationX;
-    obj1.position.y -= separationY;
-    obj2.position.x += separationX;
-    obj2.position.y += separationY;
-
-    // Add a small random perturbation to prevent objects from getting stuck in a perfect bounce loop
-    double perturbation = 0.01f;
-    obj1.velocity.x += perturbation * (rand() / (float)RAND_MAX - 0.5f);
-    obj1.velocity.y += perturbation * (rand() / (float)RAND_MAX - 0.5f);
-    obj2.velocity.x += perturbation * (rand() / (float)RAND_MAX - 0.5f);
-    obj2.velocity.y += perturbation * (rand() / (float)RAND_MAX - 0.5f);
+    // Separate the objects to prevent overlapping
+    float overlap = (obj1.radius + obj2.radius) - distance;
+    if (overlap > 0) {
+        Vector2 separationVector = {
+            normal.x * overlap * 0.5f,
+            normal.y * overlap * 0.5f
+        };
+        obj1.position.x -= separationVector.x;
+        obj1.position.y -= separationVector.y;
+        obj2.position.x += separationVector.x;
+        obj2.position.y += separationVector.y;
+    }
 }
 
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
@@ -223,8 +222,8 @@ int main() {
     // Make two objects
     Object obj1, obj2, obj3, obj4, obj5, obj6;
 
-    obj1.position.x = 0.5f;
-    obj1.position.y = 0.6f;
+    obj1.position.x = 0.7f;
+    obj1.position.y = 0.0f;
     obj1.velocity.x = -2.0f;
     obj1.velocity.y = 0.0f;
     obj1.acceleration.x = 0.0f;
@@ -235,13 +234,13 @@ int main() {
     obj1.b = 0.0f;
     obj1.radius = CONST_RADIUS/1000;
 
-    obj2.position.x = 0.0f;
+    obj2.position.x = -0.2f;
     obj2.position.y = 0.0f;
-    obj2.velocity.x = 0.0f;
+    obj2.velocity.x = 2.0f;
     obj2.velocity.y = 0.0f;
     obj2.acceleration.x = 0.0f;
     obj2.acceleration.y = 0.0f;
-    obj2.mass = 100000000000.0f;
+    obj2.mass = 10.0f;
     obj2.r = 0.3f;
     obj2.g = 0.8f;
     obj2.b = 1.0f;
@@ -294,7 +293,7 @@ int main() {
     obj6.g = 0.0f;
     obj6.b = 0.0f;
     obj6.radius = CONST_RADIUS/1000;
-    std::vector<Object> allObjects = {obj1, obj2, obj3, obj4, obj5, obj6};
+    std::vector<Object> allObjects = {obj1, obj2};
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
