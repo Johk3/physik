@@ -6,8 +6,10 @@
 #include <iterator>
 #include <thread>
 #include <vector>
+#include <iostream>
 #define TRAIL_RADIUS 2.0f
 #define CONST_RADIUS 10.0f
+#define SCALE_FACTOR 5 // used to scale all objects
 #define REFRESH_RATE 1000 // Hz. Improves physics accuracy or might fuck up if computer too slow
 
 
@@ -33,18 +35,23 @@ struct Vector2 {
 
 //Physical Object
 struct Object {
-    // Physical location and movement
-    Vector2 position;
-    Vector2 velocity;
-    Vector2 acceleration;
-    // Properties
-    double mass;
-    double r,g,b;
-    double radius;
+    // Physical location and movement. Default center, no movement
+    Vector2 position = {0.0f, 0.0f};
+    Vector2 velocity = {0.0f, 0.0f};
+    Vector2 acceleration = {0.0f, 0.0f};
+
+    // Properties. Default 100kg, white dot
+    double mass = 100.0;
+    double density = 1.0;
+    double r = 1.0;
+    double g = 1.0;
+    double b = 1.0;
+    double radius = CONST_RADIUS / (1000 * SCALE_FACTOR);
+
     // Trail
     std::vector<Vector2> trail;
     static constexpr double TRAIL_SPACING = 0.02f;  // Fixed distance between trail dots
-    static constexpr size_t MAX_TRAIL_LENGTH = 30;  // Maximum number of trail dots
+    static constexpr size_t MAX_TRAIL_LENGTH = 20;  // Maximum number of trail dots
 };
 
 void updateObjectTrail(Object& obj) {
@@ -198,10 +205,15 @@ void drawObject(const Object& obj) {
     }
 
     // Draw main object
-    drawDot(obj.position.x, obj.position.y, obj.r, obj.g, obj.b, 1.0f, CONST_RADIUS);
+    drawDot(obj.position.x, obj.position.y, obj.r, obj.g, obj.b, 1.0f, obj.radius * 1000);
 }
 
+// Used to update object radius after mass or density change
+void update_radius(Object& obj) {
 
+    obj.radius = (std::cbrt((3 * obj.mass) / (4 * 3.141592 * obj.density)) / (1000 * SCALE_FACTOR));
+
+};
 
 int main() {
     // Initialize GLFW
@@ -218,45 +230,35 @@ int main() {
 
     // Make the window's context current
     glfwMakeContextCurrent(window);
-
     // Make two objects
     Object obj1, obj2, obj3, obj4, obj5, obj6;
 
-    obj1.position.x = 0.7f;
-    obj1.position.y = 0.0f;
+    obj1.position.x = 0.6f;
     obj1.velocity.x = -2.0f;
-    obj1.velocity.y = 0.0f;
-    obj1.acceleration.x = 0.0f;
-    obj1.acceleration.y = 0.0f;
-    obj1.mass = 10.0f;
+    obj1.mass = 1000.0f;
     obj1.r = 0.0f;
-    obj1.g = 1.0f;
     obj1.b = 0.0f;
-    obj1.radius = CONST_RADIUS/1000;
+    update_radius(obj1);
 
-    obj2.position.x = -0.2f;
-    obj2.position.y = 0.0f;
+    obj2.position.x = 0.0f;
     obj2.velocity.x = 2.0f;
-    obj2.velocity.y = 0.0f;
-    obj2.acceleration.x = 0.0f;
-    obj2.acceleration.y = 0.0f;
-    obj2.mass = 10.0f;
+    obj2.mass = 1000.0f;
+    obj2.density = 0.01;
     obj2.r = 0.3f;
     obj2.g = 0.8f;
     obj2.b = 1.0f;
-    obj2.radius = CONST_RADIUS/1000;
+    update_radius(obj2);
+
 
     obj3.position.x = 0.3f;
     obj3.position.y = 0.2f;
-    obj3.velocity.x = 0.0f;
-    obj3.velocity.y = 0.0f;
-    obj3.acceleration.x = 0.0f;
-    obj3.acceleration.y = 0.0f;
-    obj3.mass = 10000.0f;
-    obj3.r = 1.0f;
+    obj3.mass = 10000000000.0f;
+    obj3.density = 1000.0;
     obj3.g = 0.0f;
     obj3.b = 0.0f;
-    obj3.radius = CONST_RADIUS/1000;
+    update_radius(obj3);
+
+    std::cout << obj3.radius;
 
     obj4.position.x = 0.2f;
     obj4.position.y = 0.4f;
@@ -293,7 +295,7 @@ int main() {
     obj6.g = 0.0f;
     obj6.b = 0.0f;
     obj6.radius = CONST_RADIUS/1000;
-    std::vector<Object> allObjects = {obj1, obj2};
+    std::vector<Object> allObjects = {obj1, obj2, obj3};
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
