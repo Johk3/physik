@@ -265,9 +265,9 @@ int main() {
     std::vector<Object> allObjects;
 
     // Create and add objects
-    allObjects.push_back(createObject({0.0f, 0.0f}, {0.1f, 0.0f}, 1e12, 1000, 0.0, 6.0, 0.8));  // Red object
-    allObjects.push_back(createObject({0.5f, 0.0f}, {0.0f, 0.1f}, 1e10, 1000, 0.0, 1.0, 0.0));  // Green object
-    allObjects.push_back(createObject({-0.5f, 0.0f}, {0.0f, -0.1f}, 1e10, 1000, 0.0, 0.0, 1.0));  // Blue object
+    allObjects.push_back(createObject({0.0f, 0.0f}, {0.6f, 0.6f}, 1e2, 0.001, 0.0, 6.0, 0.8));  // Red object
+    allObjects.push_back(createObject({0.5f, 0.0f}, {0.0f, 0.1f}, 1e12, 1000000, 0.0, 1.0, 0.0));  // Green object
+    allObjects.push_back(createObject({-0.5f, 0.0f}, {0.0f, -0.1f}, 1e2, 0.001, 0.0, 0.0, 1.0));  // Blue object
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
