@@ -7,12 +7,13 @@
 #include <thread>
 #include <vector>
 #include <iostream>
-#define TRAIL_RADIUS 2.0f
+#include <memory>
+#define SPACING 0.05f // for trail spacing
 #define TRAIL_LENGTH 30
 #define CONST_RADIUS 10.0f
-#define SCALE_FACTOR 5 // used to scale all objects
+#define SCALE_FACTOR 6 // used to scale all objects
 #define REFRESH_RATE 1000 // Hz. Improves physics accuracy or might fuck up if computer too slow
-
+#define CIRCLE_SEGMENTS 32
 
 struct Vector2 {
     double x, y;
@@ -35,7 +36,12 @@ struct Vector2 {
 };
 
 //Physical Object
-struct Object {
+class Object {
+public:
+    Object(Vector2 pos, Vector2 vel, double m, double d, double red, double green, double blue)
+        : position(pos), velocity(vel), mass(m), density(d), r(red), g(green), b(blue) {
+        radius = (std::cbrt((3 * mass) / (4 * 3.141592 * density)) / (1000 * SCALE_FACTOR));
+    }
     // Physical location and movement. Default center, no movement
     Vector2 position = {0.0f, 0.0f};
     Vector2 velocity = {0.0f, 0.0f};
@@ -51,9 +57,13 @@ struct Object {
 
     // Trail
     std::vector<Vector2> trail;
-    static constexpr double TRAIL_SPACING = 0.01f;  // Fixed distance between trail dots
+    static constexpr double TRAIL_SPACING = SPACING;  // Fixed distance between trail dots
     static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
 };
+
+Object createObject(Vector2 pos, Vector2 vel, double m, double d, double red, double green, double blue) {
+    return Object(pos, vel, m, d, red, green, blue);
+}
 
 void updateObjectTrail(Object& obj) {
     if (obj.trail.empty()) {
@@ -181,7 +191,8 @@ void updateObject(Object& obj, const std::vector<Object>& allObjects, double del
     updateObjectTrail(obj);
 }
 
-void drawDot(double x, double y, double r, double g, double b, double alpha, double size) {
+// -- Objects which can be drawn
+void drawSquare(double x, double y, double r, double g, double b, double alpha, double size) {
     mat4x4 mvp;
     mat4x4_identity(mvp);
     mat4x4_translate(mvp, x, y, 0.0f);
@@ -197,24 +208,33 @@ void drawDot(double x, double y, double r, double g, double b, double alpha, dou
     glEnd();
 }
 
+void drawCircle(double x, double y, double radius, double r, double g, double b, double alpha) {
+    int num_segments = 32;
+    glColor4d(r, g, b, alpha);
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex2d(x, y);
+    for (int i = 0; i <= num_segments; i++) {
+        double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(num_segments);
+        double dx = radius * std::cos(theta);
+        double dy = radius * std::sin(theta);
+        glVertex2d(x + dx, y + dy);
+    }
+    glEnd();
+}
+// -- Objects which can be drawn
+
 // Draws an object and its trail on the screen
 void drawObject(const Object& obj) {
     // Draw trail
     for (size_t i = 0; i < obj.trail.size(); ++i) {
         double alpha = static_cast<double>(i) / obj.trail.size();
-        drawDot(obj.trail[i].x, obj.trail[i].y, obj.r, obj.g, obj.b, alpha, TRAIL_RADIUS);
+        double trailRadius = obj.radius * 0.5 * alpha;
+        drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
     }
 
     // Draw main object
-    drawDot(obj.position.x, obj.position.y, obj.r, obj.g, obj.b, 1.0f, obj.radius * 1000);
+    drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
 }
-
-// Used to update object radius after mass or density change
-void update_radius(Object& obj) {
-
-    obj.radius = (std::cbrt((3 * obj.mass) / (4 * 3.141592 * obj.density)) / (1000 * SCALE_FACTOR));
-
-};
 
 //Used to set the color of an object
 void set_color(Object& obj, double r, double g, double b) {
@@ -240,46 +260,14 @@ int main() {
 
     // Make the window's context current
     glfwMakeContextCurrent(window);
-    // Make two objects
-    Object obj1, obj2, obj3, obj4, obj5, obj6;
+    // Initialize objects
 
-    obj1.position.x = 0.6f;
-    obj1.velocity.x = -2.0f;
-    obj1.mass = 1000.0f;
-    obj1.density = 0.01;
-    update_radius(obj1);
-    set_color(obj1, 0.0, 0.0, 1.0);
+    std::vector<Object> allObjects;
 
-    obj2.position.x = 0.0f;
-    obj2.velocity.x = 2.0f;
-    obj2.mass = 1000.0f;
-    obj2.density = 0.01;
-    update_radius(obj2);
-    set_color(obj2, 0.0, 0.8, 0.0);
-
-
-    obj3.position.x = 0.3f;
-    obj3.position.y = 0.2f;
-    obj3.mass = 10000000000.0f;
-    obj3.density = 1000.0;
-    update_radius(obj3);
-    set_color(obj3, 0.8, 0.1, 0.1);
-
-    obj4.position.x = 0.2f;
-    obj4.position.y = 0.4f;
-    obj4.velocity.x = -1.0f;
-    obj4.mass = 10000000000.0f;
-    obj4.density = 10;
-    update_radius(obj4);
-    set_color(obj4, 0.3, 0.3, 0.3);
-
-    obj5.position.x = 0.1;
-    obj5.mass = 100000000;
-    obj5.velocity = {1.0, 0.4};
-    obj6.position.x = -0.4;
-
-
-    std::vector<Object> allObjects = {obj1, obj2, obj3, obj4, obj5, obj6};
+    // Create and add objects
+    allObjects.push_back(createObject({0.0f, 0.0f}, {0.1f, 0.0f}, 1e12, 1000, 0.0, 6.0, 0.8));  // Red object
+    allObjects.push_back(createObject({0.5f, 0.0f}, {0.0f, 0.1f}, 1e10, 1000, 0.0, 1.0, 0.0));  // Green object
+    allObjects.push_back(createObject({-0.5f, 0.0f}, {0.0f, -0.1f}, 1e10, 1000, 0.0, 0.0, 1.0));  // Blue object
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
