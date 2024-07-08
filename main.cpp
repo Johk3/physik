@@ -13,7 +13,6 @@
 #include <mutex>
 #include <queue>
 #include <bits/stl_algo.h>
-
 #include "settings.h"
 
 
