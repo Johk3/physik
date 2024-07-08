@@ -1,6 +1,15 @@
 # Small scale physics engine
 This project demonstrates a simple OpenGL application using GLFW3 and GLEW. It currently only displays N-body 2D physics.
-![Alt text](img/9p6IdO0.png "Optional title")
+<table>
+  <tr>
+    <td>
+      <img src="img/9p6IdO0.png" alt="First Image" title="small orbit" />
+    </td>
+    <td>
+      <img src="img/big_collision.png" alt="Second Image" title="big collision with a massive body" />
+    </td>
+  </tr>
+</table>
 ## Dependencies
 
 This project requires the following libraries:
