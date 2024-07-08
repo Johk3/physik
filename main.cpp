@@ -352,14 +352,21 @@ void updateObjectsChunk(std::vector<Object>& objects, size_t start, size_t end, 
 
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
     const size_t numObjects = allObjects.size();
+    // Determine the number of threads available on the system
     const size_t numThreads = std::thread::hardware_concurrency();
+    // Calculate the number of objects each thread will process
+    // Ensure at least 1 object per chunk to avoid division by zero
     const size_t chunkSize = std::max(size_t(1), numObjects / numThreads);
 
     std::vector<std::future<void>> futures;
 
+    // Divide the objects into chunks and process each chunk in parallel
     for (size_t i = 0; i < numObjects; i += chunkSize) {
+        // Calculate the end index for this chunk, ensuring we don't go past the array bounds
         size_t end = std::min(i + chunkSize, numObjects);
+        // Enqueue a task to process this chunk of objects
         futures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
+            // Process each object in this chunk
             for (size_t j = i; j < end; ++j) {
                 Object& obj = allObjects[j];
                 Vector2 acceleration = calculateGravity(obj, allObjects, 0, allObjects.size());
