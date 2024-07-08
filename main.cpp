@@ -48,7 +48,6 @@ struct Vector2 {
 
 };
 
-
 //Physical Object
 class Object {
 public:
@@ -74,11 +73,8 @@ public:
     static constexpr double TRAIL_SPACING = SPACING;  // Fixed distance between trail dots
     static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
 };
-// ------ OPTIMIZATION ALGORITHMS ------
-//
-// Spatial partitioning - an optimization technique to not
-// have to query all objects per object when doing gravity and
-// collision calculations
+
+// -- OPTIMIZATIONS --
 class SpatialGrid {
 private:
     struct Cell {
@@ -130,96 +126,7 @@ public:
     }
 };
 
-// Barnes-Hut algorithm: reduces complexity from O(n^2) to O(nlogn)
-// basically it approximates gravitational forces for groups of distant objects
-// the accuracy of the approximation can be changed by modifying theta
-class QuadTree {
-public:
-    struct Node {
-        Vector2 center;
-        double size;
-        double totalMass = 0;
-        Vector2 centerOfMass = {0, 0};
-        Object* object = nullptr;
-        std::unique_ptr<Node> nw, ne, sw, se;
-
-        Node(Vector2 center, double size) : center(center), size(size) {}
-    };
-
-    std::unique_ptr<Node> root;
-    static constexpr double THETA = SIMULATION_ACCURACY; // Controls the accuracy of the approximation(lower value is more accurate)
-
-    QuadTree(double worldSize) : root(std::make_unique<Node>(Vector2{0, 0}, worldSize)) {}
-
-    void insert(Object* obj) {
-        insertRecursive(root.get(), obj);
-    }
-
-    Vector2 calculateForce(const Object& obj) const {
-        return calculateForceRecursive(root.get(), obj);
-    }
-
-private:
-    void insertRecursive(Node* node, Object* obj) {
-        if (node->object == nullptr && node->nw == nullptr) {
-            node->object = obj;
-            node->totalMass = obj->mass;
-            node->centerOfMass = obj->position;
-            return;
-        }
-
-        if (node->nw == nullptr) {
-            subdivide(node);
-            insertRecursive(getChild(node, node->object->position), node->object);
-            node->object = nullptr;
-        }
-
-        insertRecursive(getChild(node, obj->position), obj);
-
-        node->totalMass += obj->mass;
-        node->centerOfMass = (node->centerOfMass * node->totalMass + obj->position * obj->mass)
-                             / (node->totalMass + obj->mass);
-    }
-
-    void subdivide(Node* node) {
-        double halfSize = node->size / 2;
-        double quarterSize = halfSize / 2;
-        node->nw = std::make_unique<Node>(Vector2{node->center.x - quarterSize, node->center.y + quarterSize}, halfSize);
-        node->ne = std::make_unique<Node>(Vector2{node->center.x + quarterSize, node->center.y + quarterSize}, halfSize);
-        node->sw = std::make_unique<Node>(Vector2{node->center.x - quarterSize, node->center.y - quarterSize}, halfSize);
-        node->se = std::make_unique<Node>(Vector2{node->center.x + quarterSize, node->center.y - quarterSize}, halfSize);
-    }
-
-    Node* getChild(Node* node, const Vector2& pos) {
-        if (pos.x < node->center.x) {
-            return pos.y < node->center.y ? node->sw.get() : node->nw.get();
-        } else {
-            return pos.y < node->center.y ? node->se.get() : node->ne.get();
-        }
-    }
-
-    Vector2 calculateForceRecursive(const Node* node, const Object& obj) const {
-        if (node == nullptr || node->totalMass == 0) return {0, 0};
-
-        Vector2 diff = node->centerOfMass - obj.position;
-        double distance = diff.length();
-
-        if (node->object != nullptr || (node->size / distance < THETA)) {
-            if (distance < 1e-6) return {0, 0};  // Avoid self-interaction
-            double force = 6.67430e-11 * node->totalMass * obj.mass / (distance * distance * distance);
-            return diff * force;
-        } else {
-            return calculateForceRecursive(node->nw.get(), obj) +
-                   calculateForceRecursive(node->ne.get(), obj) +
-                   calculateForceRecursive(node->sw.get(), obj) +
-                   calculateForceRecursive(node->se.get(), obj);
-        }
-    }
-};
-
-//
-// ------ OPTIMIZATION ALGORITHMS ------
-
+// ----
 void updateObjectTrail(Object& obj) {
     if (obj.trail.empty()) {
         obj.trail.push_back(obj.position);
@@ -300,13 +207,36 @@ void handleCollision(Object& obj1, Object& obj2) {
 }
 
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Vector2 gravity(const Object& object, const QuadTree& quadTree) {
-    return quadTree.calculateForce(object) / object.mass;
+Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
+
+    Vector2 totalAcceleration = {0.0f, 0.0f};
+
+    for (const auto& object2 : objects) {
+        // Skip if it's the same object
+        if (&object1 == &object2) continue;
+
+        Vector2 diff = object2.position - object1.position;
+        double r2 = diff.x * diff.x + diff.y * diff.y;
+        double r = std::sqrt(r2);
+
+        // Avoid division by zero
+        if (r < 1e-6f) continue;
+
+        double force = 6.67430e-11 * object2.mass / (r2 * r);
+
+        // Avoid teleporatation due to obscene force
+        double MAX_FORCE = 10000.0f;
+        force = std::min(force, MAX_FORCE);
+
+        totalAcceleration = totalAcceleration + diff * force;
+    }
+
+    return totalAcceleration;
 }
 
 // Updates the physical state of an object over a given time step
-void updateObject(Object& obj, const QuadTree& quadTree, const double delta_time) {
-    obj.acceleration = gravity(obj, quadTree);
+void updateObject(Object& obj, const std::vector<Object>& allObjects, const double delta_time) {
+    obj.acceleration = gravity(obj, allObjects);
     obj.velocity = obj.velocity + obj.acceleration * delta_time;
     obj.position = obj.position + obj.velocity * delta_time;
 
@@ -408,12 +338,6 @@ int main() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Build QuadTree(Barnes-Hut algorithm)
-        QuadTree quadTree(2.0);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
-        for (auto& obj : allObjects) {
-            quadTree.insert(&obj);
-        }
-
         // Clear and rebuild the spatial grid
         grid.clear();
         for (auto& obj : allObjects) {
@@ -422,7 +346,7 @@ int main() {
 
         // Update all objects
         for (auto& obj : allObjects) {
-            updateObject(obj, quadTree, delta_time);
+            updateObject(obj, allObjects, delta_time);
         }
 
         // Draw all objects
@@ -430,7 +354,7 @@ int main() {
             drawObject(obj);
         }
 
-        // Check for and handle collisions with spatial partitioning
+        // Check for and handle collisions
         for (size_t i = 0; i < allObjects.size(); i++) {
             auto neighbors = grid.getNeighbors(allObjects[i]);
             for (auto* neighbor : neighbors) {
