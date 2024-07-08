@@ -159,7 +159,7 @@ void updateObjectTrail(Object& obj) {
 // Check if two circular objects are overlapping
 bool checkCollision(const Object& obj1, const Object& obj2) {
     const double distance = (obj1.position - obj2.position).length();
-    return distance < (obj1.radius + obj2.radius);
+    return distance <= (obj1.radius + obj2.radius);
 }
 
 void handleCollision(Object& obj1, Object& obj2) {
@@ -213,6 +213,9 @@ Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
     for (const auto& object2 : objects) {
         // Skip if it's the same object
         if (&object1 == &object2) continue;
+
+        // N III. If objects touch eachother then they apply the same force onto each other -> lets set both to 0
+        if (checkCollision(object1, object2)) continue;
 
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
@@ -296,11 +299,15 @@ std::vector<Object> get_objects() {
     // Create and add objects
     for (int i=0; i < 25; i++) {
         for (int j=0; j < 25; j++) {
-            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0));  // White object
+            const float r = ((rand() % 51) / 10) + 0.5;
+            const float g = ((rand() % 51) / 10) + 0.5;
+            const float b = ((rand() % 51) / 10) + 0.5;
+
+            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {r*b, -g*r}, 1e5, 0.1, r, g, b));  // White object
         }
     }
 
-    all_objects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
+    all_objects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e12, 5e3, 0.0, 0.0, 1.0));
 
     return all_objects;
 
