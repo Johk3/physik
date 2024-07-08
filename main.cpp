@@ -307,7 +307,7 @@ int main() {
     }
 
     // Create a windowed mode window and its OpenGL context
-    GLFWwindow* window = glfwCreateWindow(1000, 1000, "GRAVITY", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "GRAVITY", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         return -1;
@@ -338,6 +338,10 @@ int main() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        //
+        // BEGIN CALCULATING PHYSICS
+        //
+        
         // Clear and rebuild the spatial grid
         grid.clear();
         for (auto& obj : allObjects) {
@@ -349,10 +353,6 @@ int main() {
             updateObject(obj, allObjects, delta_time);
         }
 
-        // Draw all objects
-        for (const auto& obj : allObjects) {
-            drawObject(obj);
-        }
 
         // Check for and handle collisions
         for (size_t i = 0; i < allObjects.size(); i++) {
@@ -364,12 +364,25 @@ int main() {
             }
         }
 
+        //
+        // PHYSICS CALCULATIONS COMPLETE
+        //
+        // DRAW PHYSICS
+        //
+
+        // Draw all objects
+        for (const auto& obj : allObjects) {
+            drawObject(obj);
+        }
+
         // Swap the back buffer with the front
         glfwSwapBuffers(window);
         // Listen for any events
         glfwPollEvents();
 
-        // Set the refresh rate
+        // END DRAW PHYSICS
+
+        // Wait for frame (does not work as it should and should be removed in the future)
         std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
     }
 
