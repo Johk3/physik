@@ -9,7 +9,9 @@ find_package(glad REQUIRED)
 
 
 add_executable(physik main.cpp
-        linmath.h)
+        linmath.h
+        settings.h
+)
 
 target_link_libraries(physik glfw)
 target_link_libraries(physik GLEW::GLEW)

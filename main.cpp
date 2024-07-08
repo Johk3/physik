@@ -8,12 +8,8 @@
 #include <vector>
 #include <iostream>
 #include <memory>
-#define SPACING 0.05f // for trail spacing
-#define TRAIL_LENGTH 30
-#define CONST_RADIUS 10.0f
-#define SCALE_FACTOR 6 // used to scale all objects
-#define REFRESH_RATE 1000 // Hz. Improves physics accuracy or might fuck up if computer too slow
-#define CIRCLE_SEGMENTS 32
+#include "settings.h"
+
 
 struct Vector2 {
     double x, y;
@@ -22,6 +18,7 @@ struct Vector2 {
         return {x - other.x, y - other.y};
     }
 
+
     Vector2 operator+(const Vector2& other) const {
         return {x + other.x, y + other.y};
     }
@@ -29,10 +26,24 @@ struct Vector2 {
     Vector2 operator*(float scalar) const {
         return {x * scalar, y * scalar};
     }
+    Vector2 operator/(float scalar) const {
+        return {x / scalar, y / scalar};
+    }
 
     double length() const {
         return std::sqrt(x*x + y*y);
     }
+
+    Vector2 normal() const {
+        return {x / length(), y / length()};
+    }
+
+    double dot(Vector2& other) const {
+
+        return (x * other.x + y * other.y);
+
+    }
+
 };
 
 //Physical Object
@@ -104,34 +115,31 @@ bool checkCollision(const Object& obj1, const Object& obj2) {
 
 void handleCollision(Object& obj1, Object& obj2) {
     // Calculate vector from obj1 to obj2
-    Vector2 delta = {obj2.position.x - obj1.position.x, obj2.position.y - obj1.position.y};
-    float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+    Vector2 delta = obj2.position - obj1.position;
+    float distance = delta.length();
 
     // Normalize the delta vector
-    Vector2 normal = {delta.x / distance, delta.y / distance};
+    Vector2 normal = delta.normal();
 
     // Calculate relative velocity
-    Vector2 relativeVelocity = {
-        obj2.velocity.x - obj1.velocity.x,
-        obj2.velocity.y - obj1.velocity.y
-    };
+    Vector2 relativeVelocity = obj2.velocity - obj1.velocity;
 
-    // Calculate relative velocity along the normal
-    float velocityAlongNormal = relativeVelocity.x * normal.x + relativeVelocity.y * normal.y;
+    // Calculate relative velocity along the normal using dot product
+    float velocityAlongNormal = relativeVelocity.dot(normal);
 
     // Do not resolve if velocities are separating
     if (velocityAlongNormal > 0)
         return;
 
     // Calculate restitution (bounce factor)
-    float restitution = 0.8f;
+    float restitution = BOUNCE_FACTOR;
 
     // Calculate impulse scalar
     float impulseScalar = -(1 + restitution) * velocityAlongNormal;
     impulseScalar /= 1/obj1.mass + 1/obj2.mass;
 
     // Apply impulse
-    Vector2 impulse = {impulseScalar * normal.x, impulseScalar * normal.y};
+    Vector2 impulse = normal * impulseScalar;
 
     // Update velocities
     obj1.velocity.x -= impulse.x / obj1.mass;
@@ -142,14 +150,12 @@ void handleCollision(Object& obj1, Object& obj2) {
     // Separate the objects to prevent overlapping
     float overlap = (obj1.radius + obj2.radius) - distance;
     if (overlap > 0) {
-        Vector2 separationVector = {
-            normal.x * overlap * 0.5f,
-            normal.y * overlap * 0.5f
-        };
-        obj1.position.x -= separationVector.x;
-        obj1.position.y -= separationVector.y;
-        obj2.position.x += separationVector.x;
-        obj2.position.y += separationVector.y;
+        Vector2 separationVector = normal * (overlap * 0.5);
+
+        obj1.position.x -= separationVector.x * obj2.mass/(obj1.mass + obj2.mass);
+        obj1.position.y -= separationVector.y * obj2.mass/(obj1.mass + obj2.mass);
+        obj2.position.x += separationVector.x * obj1.mass/(obj1.mass + obj2.mass);
+        obj2.position.y += separationVector.y * obj1.mass/(obj1.mass + obj2.mass);
     }
 }
 
@@ -209,7 +215,7 @@ void drawSquare(double x, double y, double r, double g, double b, double alpha, 
 }
 
 void drawCircle(double x, double y, double radius, double r, double g, double b, double alpha) {
-    int num_segments = 32;
+    int num_segments = CIRCLE_SEGMENTS;
     glColor4d(r, g, b, alpha);
     glBegin(GL_TRIANGLE_FAN);
     glVertex2d(x, y);
@@ -225,12 +231,15 @@ void drawCircle(double x, double y, double radius, double r, double g, double b,
 
 // Draws an object and its trail on the screen
 void drawObject(const Object& obj) {
+
     // Draw trail
-    for (size_t i = 0; i < obj.trail.size(); ++i) {
-        double alpha = static_cast<double>(i) / obj.trail.size();
-        double trailRadius = obj.radius * 0.5 * alpha;
-        drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
-    }
+    if (ENABLE_TRAIL) {
+        for (size_t i = 0; i < obj.trail.size(); ++i) {
+            double alpha = static_cast<double>(i) / obj.trail.size();
+            double trailRadius = obj.radius * 0.5 * alpha;
+            drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
+        }
+    };
 
     // Draw main object
     drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
@@ -265,9 +274,13 @@ int main() {
     std::vector<Object> allObjects;
 
     // Create and add objects
-    allObjects.push_back(createObject({0.0f, 0.0f}, {0.6f, 0.6f}, 1e2, 0.001, 0.0, 6.0, 0.8));  // Red object
-    allObjects.push_back(createObject({0.5f, 0.0f}, {0.0f, 0.1f}, 1e12, 1000000, 0.0, 1.0, 0.0));  // Green object
-    allObjects.push_back(createObject({-0.5f, 0.0f}, {0.0f, -0.1f}, 1e2, 0.001, 0.0, 0.0, 1.0));  // Blue object
+    for (int i=0; i < 25; i++) {
+        for (int j=0; j < 25; j++) {
+            allObjects.push_back(createObject({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0));  // White object
+        }
+    }
+
+    allObjects.push_back(createObject({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
