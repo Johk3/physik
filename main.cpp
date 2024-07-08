@@ -7,10 +7,9 @@
 #include <vector>
 #include <iostream>
 #include <memory>
-#include <bits/stl_algo.h>
+//#include <bits/stl_algo.h>
 
 #include "settings.h"
-
 
 struct Vector2 {
     double x, y;
@@ -197,7 +196,7 @@ void handleCollision(Object& obj1, Object& obj2) {
     // Separate the objects to prevent overlapping
     const float overlap = (obj1.radius + obj2.radius) - distance;
     if (overlap > 0) {
-        Vector2 separationVector = normal * (overlap * 0.5);
+        Vector2 separationVector = normal * overlap;
 
         obj1.position.x -= separationVector.x * obj2.mass/(obj1.mass + obj2.mass);
         obj1.position.y -= separationVector.y * obj2.mass/(obj1.mass + obj2.mass);
@@ -235,8 +234,8 @@ Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
 }
 
 // Updates the physical state of an object over a given time step
-void updateObject(Object& obj, const std::vector<Object>& allObjects, const double delta_time) {
-    obj.acceleration = gravity(obj, allObjects);
+void updateObject(Object& obj, const std::vector<Object>& all_objects, const double delta_time) {
+    obj.acceleration = gravity(obj, all_objects);
     obj.velocity = obj.velocity + obj.acceleration * delta_time;
     obj.position = obj.position + obj.velocity * delta_time;
 
@@ -291,14 +290,72 @@ void drawObject(const Object& obj) {
     drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
 }
 
-//Used to set the color of an object
-void set_color(Object& obj, double r, double g, double b) {
+std::vector<Object> get_objects() {
+    std::vector<Object> all_objects;
 
-    obj.r = r;
-    obj.g = g;
-    obj.b = b;
+    // Create and add objects
+    for (int i=0; i < 25; i++) {
+        for (int j=0; j < 25; j++) {
+            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0));  // White object
+        }
+    }
 
-}
+    all_objects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
+
+    return all_objects;
+
+};
+
+// Render physics aka calculate physics
+void render_physics(std::vector<Object>& all_objects, SpatialGrid& grid, const double delta_time) {
+
+    // param all_objects: list of objects, all objects to be calculated
+    // param grid: SpatialGrid, grid for checking if objects are near each other. For optimizing collision
+    // param delta_time, double. Time taken from last update. Smaller values gives more accuracy in physics
+
+    // Clear and rebuild the spatial grid
+    grid.clear();
+    for (auto& obj : all_objects) {
+        grid.insert(&obj);
+    }
+
+    // Update all objects
+    for (auto& obj : all_objects) {
+        updateObject(obj, all_objects, delta_time);
+    }
+    
+    // Check for and handle collisions
+    for (size_t i = 0; i < all_objects.size(); i++) {
+        auto neighbors = grid.getNeighbors(all_objects[i]);
+        for (auto* neighbor : neighbors) {
+            if (&all_objects[i] != neighbor && checkCollision(all_objects[i], *neighbor)) {
+                handleCollision(all_objects[i], *neighbor);
+            }
+        }
+    }
+    
+
+};
+
+
+// Renders the screen window based on objects on it
+void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
+
+    // Clear screen?
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Draw all objects
+    for (const auto& obj : all_objects) {
+        drawObject(obj);
+    }
+
+    // Swap the back buffer with the front
+    glfwSwapBuffers(window);
+    // Listen for any events
+    glfwPollEvents();
+
+};
 
 int main() {
     // Initialize GLFW
@@ -315,75 +372,18 @@ int main() {
 
     // Make the window's context current
     glfwMakeContextCurrent(window);
-    // Initialize objects
 
-    std::vector<Object> allObjects;
-
-    // Create and add objects
-    for (int i=0; i < 25; i++) {
-        for (int j=0; j < 25; j++) {
-            allObjects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0));  // White object
-        }
-    }
-
-    allObjects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
-
-    double constexpr delta_time = 1.0f / REFRESH_RATE;
-
+    // Initialize objects, time, and grid
+    std::vector<Object> all_objects = get_objects();
+    const double delta_time = 1.0f / REFRESH_RATE;
     SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
 
-
-    // Loop until the user closes the window
+    // Window loop. Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
 
-        //
-        // BEGIN CALCULATING PHYSICS
-        //
-        
-        // Clear and rebuild the spatial grid
-        grid.clear();
-        for (auto& obj : allObjects) {
-            grid.insert(&obj);
-        }
+        render_physics(all_objects, grid, delta_time);
+        render_screen(all_objects, window);
 
-        // Update all objects
-        for (auto& obj : allObjects) {
-            updateObject(obj, allObjects, delta_time);
-        }
-
-
-        // Check for and handle collisions
-        for (size_t i = 0; i < allObjects.size(); i++) {
-            auto neighbors = grid.getNeighbors(allObjects[i]);
-            for (auto* neighbor : neighbors) {
-                if (&allObjects[i] != neighbor && checkCollision(allObjects[i], *neighbor)) {
-                    handleCollision(allObjects[i], *neighbor);
-                }
-            }
-        }
-
-        //
-        // PHYSICS CALCULATIONS COMPLETE
-        //
-        // DRAW PHYSICS
-        //
-
-        // Draw all objects
-        for (const auto& obj : allObjects) {
-            drawObject(obj);
-        }
-
-        // Swap the back buffer with the front
-        glfwSwapBuffers(window);
-        // Listen for any events
-        glfwPollEvents();
-
-        // END DRAW PHYSICS
-
-        // Wait for frame (does not work as it should and should be removed in the future)
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
     }
 
     glfwTerminate();
