@@ -1,6 +1,5 @@
 #include <GLFW/glfw3.h>
 #include "linmath.h"
-#include <math.h>
 #include <cmath>
 #include <chrono>
 #include <iterator>
@@ -18,30 +17,31 @@ struct Vector2 {
         return {x - other.x, y - other.y};
     }
 
-
     Vector2 operator+(const Vector2& other) const {
         return {x + other.x, y + other.y};
     }
 
-    Vector2 operator*(float scalar) const {
+    Vector2 operator*(const float scalar) const {
         return {x * scalar, y * scalar};
     }
-    Vector2 operator/(float scalar) const {
+
+    Vector2 operator/(const float scalar) const {
         return {x / scalar, y / scalar};
     }
 
-    double length() const {
+    // Length of vector, modulus
+    [[nodiscard]] double length() const {
         return std::sqrt(x*x + y*y);
     }
 
-    Vector2 normal() const {
+    // Normal
+    [[nodiscard]] Vector2 normal() const {
         return {x / length(), y / length()};
     }
 
-    double dot(Vector2& other) const {
-
+    // Dot product
+    [[nodiscard]] double dot(const Vector2& other) const {
         return (x * other.x + y * other.y);
-
     }
 
 };
@@ -72,7 +72,7 @@ public:
     static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
 };
 
-Object createObject(Vector2 pos, Vector2 vel, double m, double d, double red, double green, double blue) {
+Object createObject(const Vector2 pos, const Vector2 vel, const double m, const double d, const double red, const double green, const double blue) {
     return Object(pos, vel, m, d, red, green, blue);
 }
 
@@ -82,16 +82,16 @@ void updateObjectTrail(Object& obj) {
         return;
     }
 
-    Vector2 lastPosition = obj.trail.back();
-    Vector2 diff = obj.position - lastPosition;
+    const Vector2 lastPosition = obj.trail.back();
+    const Vector2 diff = obj.position - lastPosition;
     double distance = diff.length();
 
     if (distance >= Object::TRAIL_SPACING) {
         // Calculate how many new dots we need to add
-        int numNewDots = static_cast<int>(distance / Object::TRAIL_SPACING);
+        const int numNewDots = static_cast<int>(distance / Object::TRAIL_SPACING);
 
         for (int i = 0; i < numNewDots; ++i) {
-            double t = (i + 1) * Object::TRAIL_SPACING / distance;
+            const double t = (i + 1) * Object::TRAIL_SPACING / distance;
             Vector2 newDotPosition = {
                 lastPosition.x + diff.x * t,
                 lastPosition.y + diff.y * t
@@ -106,23 +106,22 @@ void updateObjectTrail(Object& obj) {
     }
 }
 
+// Check if two circular objects are overlapping
 bool checkCollision(const Object& obj1, const Object& obj2) {
-    double dx = obj1.position.x - obj2.position.x;
-    double dy = obj1.position.y - obj2.position.y;
-    double distance = std::sqrt(dx*dx + dy*dy);
+    const double distance = (obj1.position - obj2.position).length();
     return distance < (obj1.radius + obj2.radius);
 }
 
 void handleCollision(Object& obj1, Object& obj2) {
     // Calculate vector from obj1 to obj2
-    Vector2 delta = obj2.position - obj1.position;
-    float distance = delta.length();
+    const Vector2 delta = obj2.position - obj1.position;
+    const float distance = delta.length();
 
     // Normalize the delta vector
-    Vector2 normal = delta.normal();
+    const Vector2 normal = delta.normal();
 
     // Calculate relative velocity
-    Vector2 relativeVelocity = obj2.velocity - obj1.velocity;
+    const Vector2 relativeVelocity = obj2.velocity - obj1.velocity;
 
     // Calculate relative velocity along the normal using dot product
     float velocityAlongNormal = relativeVelocity.dot(normal);
@@ -131,12 +130,9 @@ void handleCollision(Object& obj1, Object& obj2) {
     if (velocityAlongNormal > 0)
         return;
 
-    // Calculate restitution (bounce factor)
-    float restitution = BOUNCE_FACTOR;
-
     // Calculate impulse scalar
-    float impulseScalar = -(1 + restitution) * velocityAlongNormal;
-    impulseScalar /= 1/obj1.mass + 1/obj2.mass;
+    float impulseScalar = - (1 + BOUNCE_FACTOR) * velocityAlongNormal;
+    impulseScalar /= 1 / obj1.mass  +  1 / obj2.mass;
 
     // Apply impulse
     Vector2 impulse = normal * impulseScalar;
@@ -148,7 +144,7 @@ void handleCollision(Object& obj1, Object& obj2) {
     obj2.velocity.y += impulse.y / obj2.mass;
 
     // Separate the objects to prevent overlapping
-    float overlap = (obj1.radius + obj2.radius) - distance;
+    const float overlap = (obj1.radius + obj2.radius) - distance;
     if (overlap > 0) {
         Vector2 separationVector = normal * (overlap * 0.5);
 
@@ -160,8 +156,8 @@ void handleCollision(Object& obj1, Object& obj2) {
 }
 
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Vector2 gravity(Object object1, const std::vector<Object>& objects) {
-    const double G = 6.6743e-11f; // Gravitational constant
+Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
+
     Vector2 totalAcceleration = {0.0f, 0.0f};
 
     for (const auto& object2 : objects) {
@@ -175,7 +171,7 @@ Vector2 gravity(Object object1, const std::vector<Object>& objects) {
         // Avoid division by zero
         if (r < 1e-6f) continue;
 
-        double force = G * object2.mass / (r2 * r);
+        double force = 6.67430e-11 * object2.mass / (r2 * r);
 
         // Avoid teleporatation due to obscene force
         double MAX_FORCE = 10000.0f;
@@ -188,7 +184,7 @@ Vector2 gravity(Object object1, const std::vector<Object>& objects) {
 }
 
 // Updates the physical state of an object over a given time step
-void updateObject(Object& obj, const std::vector<Object>& allObjects, double delta_time) {
+void updateObject(Object& obj, const std::vector<Object>& allObjects, const double delta_time) {
     obj.acceleration = gravity(obj, allObjects);
     obj.velocity = obj.velocity + obj.acceleration * delta_time;
     obj.position = obj.position + obj.velocity * delta_time;
@@ -198,7 +194,7 @@ void updateObject(Object& obj, const std::vector<Object>& allObjects, double del
 }
 
 // -- Objects which can be drawn
-void drawSquare(double x, double y, double r, double g, double b, double alpha, double size) {
+void drawSquare(const double x, const double y, const double r, const double g, const double b, const double alpha, const double size) {
     mat4x4 mvp;
     mat4x4_identity(mvp);
     mat4x4_translate(mvp, x, y, 0.0f);
@@ -214,15 +210,14 @@ void drawSquare(double x, double y, double r, double g, double b, double alpha, 
     glEnd();
 }
 
-void drawCircle(double x, double y, double radius, double r, double g, double b, double alpha) {
-    int num_segments = CIRCLE_SEGMENTS;
+void drawCircle(const double x, const double y, const double radius, const double r, const double g, const double b, const double alpha) {
     glColor4d(r, g, b, alpha);
     glBegin(GL_TRIANGLE_FAN);
     glVertex2d(x, y);
-    for (int i = 0; i <= num_segments; i++) {
-        double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(num_segments);
-        double dx = radius * std::cos(theta);
-        double dy = radius * std::sin(theta);
+    for (int i = 0; i <= CIRCLE_SEGMENTS; i++) {
+        const double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(CIRCLE_SEGMENTS);
+        const double dx = radius * std::cos(theta);
+        const double dy = radius * std::sin(theta);
         glVertex2d(x + dx, y + dy);
     }
     glEnd();
@@ -233,7 +228,7 @@ void drawCircle(double x, double y, double radius, double r, double g, double b,
 void drawObject(const Object& obj) {
 
     // Draw trail
-    if (ENABLE_TRAIL) {
+    if constexpr (ENABLE_TRAIL) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
             double alpha = static_cast<double>(i) / obj.trail.size();
             double trailRadius = obj.radius * 0.5 * alpha;
@@ -261,7 +256,7 @@ int main() {
     }
 
     // Create a windowed mode window and its OpenGL context
-    GLFWwindow* window = glfwCreateWindow(1000, 1000, "GRAVITY", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1000, 1000, "GRAVITY", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         return -1;
@@ -282,12 +277,12 @@ int main() {
 
     allObjects.push_back(createObject({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
 
+    double constexpr delta_time = 1.0f / REFRESH_RATE;
+
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-
-        double delta_time = 1.0f / REFRESH_RATE;
 
         // Update all objects
         for (auto& obj : allObjects) {
