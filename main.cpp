@@ -234,7 +234,7 @@ void drawObject(const Object& obj) {
     if constexpr (ENABLE_TRAIL) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
             double alpha = static_cast<double>(i) / obj.trail.size();
-            double trailRadius = obj.radius * 0.5 * alpha;
+            double trailRadius = obj.radius * MAX_TRAIL_SIZE * alpha;
             drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
         }
     };
@@ -249,42 +249,31 @@ std::vector<Object> get_objects() {
     // Create and add objects
     for (int i=0; i < 25; i++) {
         for (int j=0; j < 25; j++) {
-            const float r = ((rand() % 51) / 10) + 0.5;
-            const float g = ((rand() % 51) / 10) + 0.5;
-            const float b = ((rand() % 51) / 10) + 0.5;
+            const float r = float(i)/(24.0f * 0.9f) + 0.10f;
+            const float g = float(j)/(24.0f * 0.9f) + 0.10f;
+            const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
 
-            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f,0.0f}, 1e5, 0.1, r, g, b));  // White object
+            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f,0.0f}, 1e5, 0.06, r, g, b));
         }
     }
 
-    all_objects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e12, 5e3, 0.0, 0.0, 1.0));
+    all_objects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e12, 5e3, 1.0, 1.0, 1.0));
 
     return all_objects;
 
 };
 
 // Render physics aka calculate physics
-void render_physics(std::vector<Object>& all_objects, const double delta_time) {
+void render_physics(std::vector<Object>& all_objects) {
 
     // param all_objects: list of objects, all objects to be calculated
     // param delta_time, double. Time taken from last update. Smaller values gives more accuracy in physics
 
-    if constexpr (ENABLE_THREADING) {
-        std::vector<std::thread> ThreadVector;
+    double constexpr delta_time = double(1.0) / double(REFRESH_RATE);
 
-        for (auto& obj : all_objects) {
-            ThreadVector.emplace_back([&](){updateObject(obj, all_objects, delta_time);});
-        };
-
-        for(auto& t: ThreadVector) {t.join();};
-    } else {
-
-        for (auto& obj : all_objects) {
-            updateObject(obj, all_objects, delta_time);
-        };
-
+    for (auto& obj : all_objects) {
+        updateObject(obj, all_objects, delta_time);
     };
-
 };
 
 
@@ -306,10 +295,7 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
     glfwPollEvents();
 
 };
-void func(Object& obj) {
 
-        obj.velocity.x = 10;
-    }
 int main()
 {
 
@@ -328,14 +314,13 @@ int main()
     // Make the window's context current
     glfwMakeContextCurrent(window);
 
-    // Initialize objects, time, and grid
+    // Initialize objects
     std::vector<Object> all_objects = get_objects();
-    const double delta_time = 1.0f / REFRESH_RATE;
 
     // Window loop. Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
 
-        render_physics(all_objects, delta_time);
+        render_physics(all_objects);
         render_screen(all_objects, window);
 
     }
