@@ -49,7 +49,7 @@ struct Vector2 {
 //Physical Object
 class Object {
 public:
-    Object(Vector2 pos, Vector2 vel, double m, double d, double red, double green, double blue)
+    Object(const Vector2 pos, const Vector2 vel, const double m, const double d, const double red, const double green, const double blue)
         : position(pos), velocity(vel), mass(m), density(d), r(red), g(green), b(blue) {
         radius = (std::cbrt((3 * mass) / (4 * 3.141592 * density)) / (1000 * SCALE_FACTOR));
     }
@@ -71,10 +71,6 @@ public:
     static constexpr double TRAIL_SPACING = SPACING;  // Fixed distance between trail dots
     static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
 };
-
-Object createObject(const Vector2 pos, const Vector2 vel, const double m, const double d, const double red, const double green, const double blue) {
-    return Object(pos, vel, m, d, red, green, blue);
-}
 
 void updateObjectTrail(Object& obj) {
     if (obj.trail.empty()) {
@@ -271,11 +267,11 @@ int main() {
     // Create and add objects
     for (int i=0; i < 25; i++) {
         for (int j=0; j < 25; j++) {
-            allObjects.push_back(createObject({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0));  // White object
+            allObjects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0));  // White object
         }
     }
 
-    allObjects.push_back(createObject({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
+    allObjects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
 
     double constexpr delta_time = 1.0f / REFRESH_RATE;
 
