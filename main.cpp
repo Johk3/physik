@@ -2,11 +2,16 @@
 #include "linmath.h"
 #include <cmath>
 #include <chrono>
+#include <condition_variable>
+#include <functional>
+#include <future>
 #include <iterator>
 #include <thread>
 #include <vector>
 #include <iostream>
 #include <memory>
+#include <mutex>
+#include <queue>
 #include <bits/stl_algo.h>
 
 #include "settings.h"
@@ -75,6 +80,7 @@ public:
 };
 
 // -- OPTIMIZATIONS --
+// Optimized SpatialGrid
 class SpatialGrid {
 private:
     struct Cell {
@@ -124,6 +130,78 @@ public:
         }
         return neighbors;
     }
+};
+
+// Thread Pool implementation
+#include <vector>
+#include <queue>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <stdexcept>
+
+class ThreadPool {
+public:
+    ThreadPool(size_t numThreads) : stop(false) {
+        for(size_t i = 0; i < numThreads; ++i) {
+            workers.emplace_back(
+                [this] {
+                    while(true) {
+                        std::function<void()> task;
+                        {
+                            std::unique_lock<std::mutex> lock(this->queue_mutex);
+                            this->condition.wait(lock,
+                                [this] { return this->stop || !this->tasks.empty(); });
+                            if(this->stop && this->tasks.empty())
+                                return;
+                            task = std::move(this->tasks.front());
+                            this->tasks.pop();
+                        }
+                        task();
+                    }
+                }
+            );
+        }
+    }
+
+    template<class F, class... Args>
+    auto enqueue(F&& f, Args&&... args)
+        -> std::future<typename std::invoke_result<F, Args...>::type> {
+        using return_type = typename std::invoke_result<F, Args...>::type;
+
+        auto task = std::make_shared< std::packaged_task<return_type()> >(
+                std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+            );
+
+        std::future<return_type> res = task->get_future();
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            if(stop)
+                throw std::runtime_error("enqueue on stopped ThreadPool");
+            tasks.emplace([task](){ (*task)(); });
+        }
+        condition.notify_one();
+        return res;
+    }
+
+    ~ThreadPool() {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            stop = true;
+        }
+        condition.notify_all();
+        for(std::thread &worker: workers)
+            worker.join();
+    }
+
+private:
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+    std::mutex queue_mutex;
+    std::condition_variable condition;
+    bool stop;
 };
 
 // ----
@@ -206,25 +284,24 @@ void handleCollision(Object& obj1, Object& obj2) {
     }
 }
 
-// Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
+std::mutex cout_mutex;
+std::atomic<bool> simulation_running(true);
 
+// Simplified parallel gravity calculation
+Vector2 calculateGravity(const Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
     Vector2 totalAcceleration = {0.0f, 0.0f};
 
-    for (const auto& object2 : objects) {
-        // Skip if it's the same object
+    for (size_t i = start; i < end; ++i) {
+        const auto& object2 = objects[i];
         if (&object1 == &object2) continue;
 
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
         double r = std::sqrt(r2);
 
-        // Avoid division by zero
         if (r < 1e-6f) continue;
 
         double force = 6.67430e-11 * object2.mass / (r2 * r);
-
-        // Avoid teleporatation due to obscene force
         double MAX_FORCE = 10000.0f;
         force = std::min(force, MAX_FORCE);
 
@@ -234,15 +311,64 @@ Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
     return totalAcceleration;
 }
 
-// Updates the physical state of an object over a given time step
-void updateObject(Object& obj, const std::vector<Object>& allObjects, const double delta_time) {
-    obj.acceleration = gravity(obj, allObjects);
-    obj.velocity = obj.velocity + obj.acceleration * delta_time;
-    obj.position = obj.position + obj.velocity * delta_time;
+void updateObjectsChunk(std::vector<Object>& objects, size_t start, size_t end, double delta_time) {
+    for (size_t i = start; i < end; ++i) {
+        Object& obj = objects[i];
 
-    // Update the object's trail for rendering motion trail
-    updateObjectTrail(obj);
+        // Calculate gravity for this object
+        Vector2 acceleration = calculateGravity(obj, objects, 0, objects.size());
+
+        // Update object's state
+        obj.acceleration = acceleration;
+        obj.velocity = obj.velocity + obj.acceleration * delta_time;
+        obj.position = obj.position + obj.velocity * delta_time;
+
+        updateObjectTrail(obj);
+    }
 }
+
+void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
+    const size_t numObjects = allObjects.size();
+    const size_t numThreads = std::thread::hardware_concurrency();
+    const size_t chunkSize = std::max(size_t(1), numObjects / numThreads);
+
+    std::vector<std::future<void>> futures;
+
+    for (size_t i = 0; i < numObjects; i += chunkSize) {
+        size_t end = std::min(i + chunkSize, numObjects);
+        futures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
+            for (size_t j = i; j < end; ++j) {
+                Object& obj = allObjects[j];
+                Vector2 acceleration = calculateGravity(obj, allObjects, 0, allObjects.size());
+                obj.acceleration = acceleration;
+                obj.velocity = obj.velocity + obj.acceleration * delta_time;
+                obj.position = obj.position + obj.velocity * delta_time;
+                updateObjectTrail(obj);
+            }
+        }));
+    }
+
+    for (auto& future : futures) {
+        future.get();
+    }
+
+    // Clear and rebuild the spatial grid
+    grid.clear();
+    for (auto& obj : allObjects) {
+        grid.insert(&obj);
+    }
+
+    // Handle collisions
+    for (size_t i = 0; i < allObjects.size(); i++) {
+        auto neighbors = grid.getNeighbors(allObjects[i]);
+        for (auto* neighbor : neighbors) {
+            if (&allObjects[i] != neighbor && checkCollision(allObjects[i], *neighbor)) {
+                handleCollision(allObjects[i], *neighbor);
+            }
+        }
+    }
+}
+
 
 // -- Objects which can be drawn
 void drawSquare(const double x, const double y, const double r, const double g, const double b, const double alpha, const double size) {
@@ -320,17 +446,18 @@ int main() {
     std::vector<Object> allObjects;
 
     // Create and add objects
-    for (int i=0; i < 25; i++) {
-        for (int j=0; j < 25; j++) {
-            allObjects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0));  // White object
+    for (int i = 0; i < 25; i++) {
+        for (int j = 0; j < 25; j++) {
+            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0);
         }
     }
+    allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0);
 
-    allObjects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0));
 
     double constexpr delta_time = 1.0f / REFRESH_RATE;
 
     SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
+    ThreadPool pool(std::thread::hardware_concurrency());
 
 
     // Loop until the user closes the window
@@ -338,30 +465,11 @@ int main() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Clear and rebuild the spatial grid
-        grid.clear();
-        for (auto& obj : allObjects) {
-            grid.insert(&obj);
-        }
-
-        // Update all objects
-        for (auto& obj : allObjects) {
-            updateObject(obj, allObjects, delta_time);
-        }
+        updateSimulation(allObjects, grid, pool, delta_time);
 
         // Draw all objects
         for (const auto& obj : allObjects) {
             drawObject(obj);
-        }
-
-        // Check for and handle collisions
-        for (size_t i = 0; i < allObjects.size(); i++) {
-            auto neighbors = grid.getNeighbors(allObjects[i]);
-            for (auto* neighbor : neighbors) {
-                if (&allObjects[i] != neighbor && checkCollision(allObjects[i], *neighbor)) {
-                    handleCollision(allObjects[i], *neighbor);
-                }
-            }
         }
 
         // Swap the back buffer with the front
