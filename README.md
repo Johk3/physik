@@ -10,6 +10,7 @@ This project demonstrates a simple OpenGL application using GLFW3 and GLEW. It c
     </td>
   </tr>
 </table>
+
 ## Dependencies
 
 This project requires the following libraries:
