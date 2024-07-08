@@ -22,6 +22,7 @@
 #define CIRCLE_SEGMENTS 32      // Number of segments in circle rendering
 #define WINDOW_HEIGHT 1440
 #define WINDOW_WIDTH 1440
+#define ENABLE_THREADING true
 
 
 #endif //SETTINGS_H

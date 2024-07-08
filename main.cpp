@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iterator>
 #include <thread>
+#include <future>
 #include <vector>
 #include <iostream>
 #include <memory>
@@ -252,7 +253,7 @@ std::vector<Object> get_objects() {
             const float g = ((rand() % 51) / 10) + 0.5;
             const float b = ((rand() % 51) / 10) + 0.5;
 
-            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {(rand()%3-2)*r*b, (rand()%3-2) * g*r}, 1e5, 0.1, r, g, b));  // White object
+            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f,0.0f}, 1e5, 0.1, r, g, b));  // White object
         }
     }
 
@@ -268,11 +269,21 @@ void render_physics(std::vector<Object>& all_objects, const double delta_time) {
     // param all_objects: list of objects, all objects to be calculated
     // param delta_time, double. Time taken from last update. Smaller values gives more accuracy in physics
 
+    if constexpr (ENABLE_THREADING) {
+        std::vector<std::thread> ThreadVector;
 
-    // Update all objects
-    for (auto& obj : all_objects) {
-        updateObject(obj, all_objects, delta_time);
-    }
+        for (auto& obj : all_objects) {
+            ThreadVector.emplace_back([&](){updateObject(obj, all_objects, delta_time);});
+        };
+
+        for(auto& t: ThreadVector) {t.join();};
+    } else {
+
+        for (auto& obj : all_objects) {
+            updateObject(obj, all_objects, delta_time);
+        };
+
+    };
 
 };
 
@@ -295,8 +306,13 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
     glfwPollEvents();
 
 };
+void func(Object& obj) {
 
-int main() {
+        obj.velocity.x = 10;
+    }
+int main()
+{
+
     // Initialize GLFW
     if (!glfwInit()) {
         return -1;
