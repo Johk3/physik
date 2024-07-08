@@ -303,7 +303,7 @@ std::vector<Object> get_objects() {
             const float g = ((rand() % 51) / 10) + 0.5;
             const float b = ((rand() % 51) / 10) + 0.5;
 
-            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {r*b, -g*r}, 1e5, 0.1, r, g, b));  // White object
+            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {(rand()%3-2)*r*b, (rand()%3-2) * g*r}, 1e5, 0.1, r, g, b));  // White object
         }
     }
 

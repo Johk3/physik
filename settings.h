@@ -6,11 +6,11 @@
 #define SETTINGS_H
 
 // PHYSICS SETTINGS
-#define BOUNCE_FACTOR 0.8       // Restitution. Collision stuff
+#define BOUNCE_FACTOR 1.0       // Restitution. Collision stuff
 #define SIMULATION_ACCURACY 0.3     // Low value -> High accuracy and bad fps
 
 // TRAIL SETTINGS
-#define ENABLE_TRAIL false
+#define ENABLE_TRAIL true
 // Enable or disable trail
 #define SPACING 0.05f           // for trail spacing
 #define TRAIL_LENGTH 10         // How many trail "dots" per object
