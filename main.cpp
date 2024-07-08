@@ -21,6 +21,7 @@
 #include <functional>
 #include <future>
 #include <stdexcept>
+#include <unordered_set>
 
 struct Vector2 {
     double x, y;
@@ -95,10 +96,11 @@ private:
     std::vector<Cell> grid;
     int gridWidth, gridHeight;
     double cellSize;
+    double worldWidth, worldHeight;
 
 public:
     SpatialGrid(double worldWidth, double worldHeight, double cellSize)
-        : cellSize(cellSize) {
+        : worldWidth(worldWidth), worldHeight(worldHeight), cellSize(cellSize) {
         gridWidth = static_cast<int>(std::ceil(worldWidth / cellSize));
         gridHeight = static_cast<int>(std::ceil(worldHeight / cellSize));
         grid.resize(gridWidth * gridHeight);
@@ -111,28 +113,52 @@ public:
     }
 
     void insert(Object* obj) {
-        int cellX = static_cast<int>((obj->position.x + 1.0) / cellSize);
-        int cellY = static_cast<int>((obj->position.y + 1.0) / cellSize);
-        cellX = std::clamp(cellX, 0, gridWidth - 1);
-        cellY = std::clamp(cellY, 0, gridHeight - 1);
-        grid[cellY * gridWidth + cellX].objects.push_back(obj);
+        // Calculate the range of cells this object could occupy
+        int minX = static_cast<int>((obj->position.x - obj->radius + worldWidth/2) / cellSize);
+        int maxX = static_cast<int>((obj->position.x + obj->radius + worldWidth/2) / cellSize);
+        int minY = static_cast<int>((obj->position.y - obj->radius + worldHeight/2) / cellSize);
+        int maxY = static_cast<int>((obj->position.y + obj->radius + worldHeight/2) / cellSize);
+
+        // Clamp to grid boundaries
+        minX = std::max(0, std::min(minX, gridWidth - 1));
+        maxX = std::max(0, std::min(maxX, gridWidth - 1));
+        minY = std::max(0, std::min(minY, gridHeight - 1));
+        maxY = std::max(0, std::min(maxY, gridHeight - 1));
+
+        // Insert the object into all cells it occupies
+        for (int y = minY; y <= maxY; ++y) {
+            for (int x = minX; x <= maxX; ++x) {
+                grid[y * gridWidth + x].objects.push_back(obj);
+            }
+        }
     }
 
     std::vector<Object*> getNeighbors(const Object& obj) {
         std::vector<Object*> neighbors;
-        int cellX = static_cast<int>((obj.position.x + 1.0) / cellSize);
-        int cellY = static_cast<int>((obj.position.y + 1.0) / cellSize);
+        std::unordered_set<Object*> uniqueNeighbors;  // To avoid duplicates
 
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                int nx = cellX + dx;
-                int ny = cellY + dy;
-                if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-                    auto& cell = grid[ny * gridWidth + nx];
-                    neighbors.insert(neighbors.end(), cell.objects.begin(), cell.objects.end());
+        // Calculate the range of cells to check
+        int minX = static_cast<int>((obj.position.x - obj.radius - cellSize + worldWidth/2) / cellSize);
+        int maxX = static_cast<int>((obj.position.x + obj.radius + cellSize + worldWidth/2) / cellSize);
+        int minY = static_cast<int>((obj.position.y - obj.radius - cellSize + worldHeight/2) / cellSize);
+        int maxY = static_cast<int>((obj.position.y + obj.radius + cellSize + worldHeight/2) / cellSize);
+
+        // Clamp to grid boundaries
+        minX = std::max(0, std::min(minX, gridWidth - 1));
+        maxX = std::max(0, std::min(maxX, gridWidth - 1));
+        minY = std::max(0, std::min(minY, gridHeight - 1));
+        maxY = std::max(0, std::min(maxY, gridHeight - 1));
+
+        for (int y = minY; y <= maxY; ++y) {
+            for (int x = minX; x <= maxX; ++x) {
+                for (Object* neighbor : grid[y * gridWidth + x].objects) {
+                    if (neighbor != &obj && uniqueNeighbors.insert(neighbor).second) {
+                        neighbors.push_back(neighbor);
+                    }
                 }
             }
         }
+
         return neighbors;
     }
 };
@@ -359,13 +385,12 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
     for (size_t i = 0; i < allObjects.size(); i++) {
         auto neighbors = grid.getNeighbors(allObjects[i]);
         for (auto* neighbor : neighbors) {
-            if (&allObjects[i] != neighbor && checkCollision(allObjects[i], *neighbor)) {
+            if (checkCollision(allObjects[i], *neighbor)) {
                 handleCollision(allObjects[i], *neighbor);
             }
         }
     }
 }
-
 
 // -- Objects which can be drawn
 void drawSquare(const double x, const double y, const double r, const double g, const double b, const double alpha, const double size) {
@@ -445,16 +470,16 @@ int main() {
     // Create and add objects
     for (int i = 0; i < 25; i++) {
         for (int j = 0; j < 25; j++) {
-            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{0.0f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0);
+            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{1.5f, 0.0f}, 1e5, 0.1, 1.0, 1.0, 1.0);
         }
     }
-    allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e3, 0.0, 0.0, 1.0);
+    allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 0.0, 0.0, 1.0);
 
 
     double constexpr delta_time = 1.0f / REFRESH_RATE;
 
     SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
-    ThreadPool pool(std::thread::hardware_concurrency());
+    ThreadPool pool(std::thread::hardware_concurrency()); // Hardware conc returns the amount of supported concurrent threads
 
 
     // Loop until the user closes the window
