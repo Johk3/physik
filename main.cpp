@@ -14,34 +14,35 @@
 struct Vector2 {
     double x, y;
     // Vector operations which can be performed locally
-    Vector2 operator-(const Vector2& other) const {
+    // constexpr is for compile-time constant use
+    constexpr Vector2 operator-(const Vector2& other) const {
         return {x - other.x, y - other.y};
     }
 
-    Vector2 operator+(const Vector2& other) const {
+    constexpr Vector2 operator+(const Vector2& other) const {
         return {x + other.x, y + other.y};
     }
 
-    Vector2 operator*(const float scalar) const {
+    constexpr Vector2 operator*(const float scalar) const {
         return {x * scalar, y * scalar};
     }
 
-    Vector2 operator/(const float scalar) const {
+    constexpr Vector2 operator/(const float scalar) const {
         return {x / scalar, y / scalar};
     }
 
     // Length of vector, modulus
-    [[nodiscard]] double length() const {
+    [[nodiscard]] constexpr double length() const {
         return std::sqrt(x*x + y*y);
     }
 
     // Normal
-    [[nodiscard]] Vector2 normal() const {
+    [[nodiscard]] constexpr Vector2 normal() const {
         return {x / length(), y / length()};
     }
 
     // Dot product
-    [[nodiscard]] double dot(const Vector2& other) const {
+    [[nodiscard]] constexpr double dot(const Vector2& other) const {
         return (x * other.x + y * other.y);
     }
 
@@ -154,31 +155,25 @@ void handleCollision(Object& obj1, Object& obj2) {
 }
 
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Vector2 gravity(Object& object1, std::vector<Object>& objects) {
+Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
+    Vector2 totalAcceleration = {0.0, 0.0};
 
-    Vector2 totalAcceleration = {0.0f, 0.0f};
-
-    for (auto& object2 : objects) {
-        // Skip if it's the same object
+    for (const auto& object2 : objects) {
         if (&object1 == &object2) continue;
-
-        if (checkCollision(object1, object2)) {
-            handleCollision(object1, object2);
-        };
 
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
+
+        if (r2 < 1e-12) continue;  // Avoid division by zero
+
         double r = std::sqrt(r2);
 
-        // Avoid division by zero
-        if (r < 1e-6f) continue;
+        if (r <= object1.radius + object2.radius) {
+            handleCollision(const_cast<Object&>(object1), const_cast<Object&>(object2));
+            continue;
+        }
 
-        double force = 6.67430e-11 * object2.mass / (r2 * r);
-
-        // Avoid teleporatation due to obscene force
-        double MAX_FORCE = 10000.0f;
-        force = std::min(force, MAX_FORCE);
-
+        double force = std::min(6.67430e-11 * object2.mass / (r2 * r), 10000.0);
         totalAcceleration = totalAcceleration + diff * force;
     }
 
@@ -303,24 +298,28 @@ int main() {
     }
 
     // Create a windowed mode window and its OpenGL context
-    GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "GRAVITY", nullptr, nullptr);
+    auto window_deleter = [](GLFWwindow* w) { glfwDestroyWindow(w); glfwTerminate(); };
+    std::unique_ptr<GLFWwindow, decltype(window_deleter)> window(
+        glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "GRAVITY", nullptr, nullptr),
+        window_deleter
+    );
     if (!window) {
         glfwTerminate();
         return -1;
     }
 
     // Make the window's context current
-    glfwMakeContextCurrent(window);
+    glfwMakeContextCurrent(window.get());
 
     // Initialize objects, time, and grid
     std::vector<Object> all_objects = get_objects();
     const double delta_time = 1.0f / REFRESH_RATE;
 
     // Window loop. Loop until the user closes the window
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window.get())) {
 
         render_physics(all_objects, delta_time);
-        render_screen(all_objects, window);
+        render_screen(all_objects, window.get());
 
     }
 
