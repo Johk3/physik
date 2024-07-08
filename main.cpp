@@ -73,59 +73,7 @@ public:
     static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
 };
 
-// -- OPTIMIZATIONS --
-class SpatialGrid {
-private:
-    struct Cell {
-        std::vector<Object*> objects;
-    };
 
-    std::vector<Cell> grid;
-    int gridWidth, gridHeight;
-    double cellSize;
-
-public:
-    SpatialGrid(double worldWidth, double worldHeight, double cellSize)
-        : cellSize(cellSize) {
-        gridWidth = static_cast<int>(std::ceil(worldWidth / cellSize));
-        gridHeight = static_cast<int>(std::ceil(worldHeight / cellSize));
-        grid.resize(gridWidth * gridHeight);
-    }
-
-    void clear() {
-        for (auto& cell : grid) {
-            cell.objects.clear();
-        }
-    }
-
-    void insert(Object* obj) {
-        int cellX = static_cast<int>((obj->position.x + 1.0) / cellSize);
-        int cellY = static_cast<int>((obj->position.y + 1.0) / cellSize);
-        cellX = std::clamp(cellX, 0, gridWidth - 1);
-        cellY = std::clamp(cellY, 0, gridHeight - 1);
-        grid[cellY * gridWidth + cellX].objects.push_back(obj);
-    }
-
-    std::vector<Object*> getNeighbors(const Object& obj) {
-        std::vector<Object*> neighbors;
-        int cellX = static_cast<int>((obj.position.x + 1.0) / cellSize);
-        int cellY = static_cast<int>((obj.position.y + 1.0) / cellSize);
-
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                int nx = cellX + dx;
-                int ny = cellY + dy;
-                if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-                    auto& cell = grid[ny * gridWidth + nx];
-                    neighbors.insert(neighbors.end(), cell.objects.begin(), cell.objects.end());
-                }
-            }
-        }
-        return neighbors;
-    }
-};
-
-// ----
 void updateObjectTrail(Object& obj) {
     if (obj.trail.empty()) {
         obj.trail.push_back(obj.position);
@@ -206,16 +154,17 @@ void handleCollision(Object& obj1, Object& obj2) {
 }
 
 // Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
+Vector2 gravity(Object& object1, std::vector<Object>& objects) {
 
     Vector2 totalAcceleration = {0.0f, 0.0f};
 
-    for (const auto& object2 : objects) {
+    for (auto& object2 : objects) {
         // Skip if it's the same object
         if (&object1 == &object2) continue;
 
-        // N III. If objects touch eachother then they apply the same force onto each other -> lets set both to 0
-        if (checkCollision(object1, object2)) continue;
+        if (checkCollision(object1, object2)) {
+            handleCollision(object1, object2);
+        };
 
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
@@ -237,7 +186,7 @@ Vector2 gravity(const Object& object1, const std::vector<Object>& objects) {
 }
 
 // Updates the physical state of an object over a given time step
-void updateObject(Object& obj, const std::vector<Object>& all_objects, const double delta_time) {
+void updateObject(Object& obj, std::vector<Object>& all_objects, const double delta_time) {
     obj.acceleration = gravity(obj, all_objects);
     obj.velocity = obj.velocity + obj.acceleration * delta_time;
     obj.position = obj.position + obj.velocity * delta_time;
@@ -314,33 +263,16 @@ std::vector<Object> get_objects() {
 };
 
 // Render physics aka calculate physics
-void render_physics(std::vector<Object>& all_objects, SpatialGrid& grid, const double delta_time) {
+void render_physics(std::vector<Object>& all_objects, const double delta_time) {
 
     // param all_objects: list of objects, all objects to be calculated
-    // param grid: SpatialGrid, grid for checking if objects are near each other. For optimizing collision
     // param delta_time, double. Time taken from last update. Smaller values gives more accuracy in physics
 
-    // Clear and rebuild the spatial grid
-    grid.clear();
-    for (auto& obj : all_objects) {
-        grid.insert(&obj);
-    }
 
     // Update all objects
     for (auto& obj : all_objects) {
         updateObject(obj, all_objects, delta_time);
     }
-    
-    // Check for and handle collisions
-    for (size_t i = 0; i < all_objects.size(); i++) {
-        auto neighbors = grid.getNeighbors(all_objects[i]);
-        for (auto* neighbor : neighbors) {
-            if (&all_objects[i] != neighbor && checkCollision(all_objects[i], *neighbor)) {
-                handleCollision(all_objects[i], *neighbor);
-            }
-        }
-    }
-    
 
 };
 
@@ -383,12 +315,11 @@ int main() {
     // Initialize objects, time, and grid
     std::vector<Object> all_objects = get_objects();
     const double delta_time = 1.0f / REFRESH_RATE;
-    SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
 
     // Window loop. Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
 
-        render_physics(all_objects, grid, delta_time);
+        render_physics(all_objects, delta_time);
         render_screen(all_objects, window);
 
     }
