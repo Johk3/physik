@@ -92,7 +92,7 @@ double g_trailSpacing = SPACING;
 double g_maxTrailLength = TRAIL_LENGTH;
 double g_bounceFactor = BOUNCE_FACTOR;
 double g_scaleFactor = SCALE_FACTOR;
-double g_circleSegments = CIRCLE_SEGMENTS;
+int g_circleSegments = CIRCLE_SEGMENTS;
 int g_refreshRate = REFRESH_RATE;
 
 
@@ -169,8 +169,8 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     g_scaleFactor = std::max(0.1, std::min(100.0, g_scaleFactor));
 
     // Circle Segments
-    ImGui::InputDouble("Circle Segments", &g_circleSegments, 1.0, 10.0);
-    g_circleSegments = std::max(3.0, std::min(100.0, g_circleSegments));
+    ImGui::InputInt("Circle Segments", &g_circleSegments, 1.0, 10.0);
+    g_circleSegments = std::max(3, std::min(100, g_circleSegments));
 
     // Refresh Rate
     ImGui::InputInt("Refresh Rate", &g_refreshRate, 100.0, 1000.0);
@@ -180,7 +180,7 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::Text("Current Trail Length: %.0f", g_maxTrailLength);
     ImGui::Text("Current Bounce Factor: %.2f", g_bounceFactor);
     ImGui::Text("Current Scale Factor: %.2f", g_scaleFactor);
-    ImGui::Text("Current Circle Segments: %.0f", g_circleSegments);
+    ImGui::Text("Current Circle Segments: %d", g_circleSegments);
     ImGui::Text("Current Refresh Rate: %d", g_refreshRate);
 
     ImGui::End();
