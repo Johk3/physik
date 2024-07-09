@@ -2,47 +2,57 @@
 #include "linmath.h"
 #include <cmath>
 #include <chrono>
+#include <condition_variable>
+#include <functional>
+#include <future>
 #include <iterator>
 #include <thread>
 #include <future>
 #include <vector>
-#include <iostream>
 #include <memory>
-//#include <bits/stl_algo.h>
-
 #include "settings.h"
+#include <vector>
+#include <queue>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <stdexcept>
+#include <unordered_set>
 
 struct Vector2 {
     double x, y;
     // Vector operations which can be performed locally
-    Vector2 operator-(const Vector2& other) const {
+    // constexpr is for compile-time constant use
+    constexpr Vector2 operator-(const Vector2& other) const {
         return {x - other.x, y - other.y};
     }
 
-    Vector2 operator+(const Vector2& other) const {
+    constexpr Vector2 operator+(const Vector2& other) const {
         return {x + other.x, y + other.y};
     }
 
-    Vector2 operator*(const float scalar) const {
+    constexpr Vector2 operator*(const float scalar) const {
         return {x * scalar, y * scalar};
     }
 
-    Vector2 operator/(const float scalar) const {
+    constexpr Vector2 operator/(const float scalar) const {
         return {x / scalar, y / scalar};
     }
 
     // Length of vector, modulus
-    [[nodiscard]] double length() const {
+    [[nodiscard]] constexpr double length() const {
         return std::sqrt(x*x + y*y);
     }
 
     // Normal
-    [[nodiscard]] Vector2 normal() const {
+    [[nodiscard]] constexpr Vector2 normal() const {
         return {x / length(), y / length()};
     }
 
     // Dot product
-    [[nodiscard]] double dot(const Vector2& other) const {
+    [[nodiscard]] constexpr double dot(const Vector2& other) const {
         return (x * other.x + y * other.y);
     }
 
@@ -74,7 +84,149 @@ public:
     static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
 };
 
+// -- OPTIMIZATIONS --
+// Optimized SpatialGrid
+class SpatialGrid {
+private:
+    struct Cell {
+        std::vector<Object*> objects;
+    };
 
+    std::vector<Cell> grid;
+    int gridWidth, gridHeight;
+    double cellSize;
+    double worldWidth, worldHeight;
+
+public:
+    SpatialGrid(double worldWidth, double worldHeight, double cellSize)
+        : worldWidth(worldWidth), worldHeight(worldHeight), cellSize(cellSize) {
+        gridWidth = static_cast<int>(std::ceil(worldWidth / cellSize));
+        gridHeight = static_cast<int>(std::ceil(worldHeight / cellSize));
+        grid.resize(gridWidth * gridHeight);
+    }
+
+    void clear() {
+        for (auto& cell : grid) {
+            cell.objects.clear();
+        }
+    }
+
+    void insert(Object* obj) {
+        // Calculate the range of cells this object could occupy
+        int minX = static_cast<int>((obj->position.x - obj->radius + worldWidth/2) / cellSize);
+        int maxX = static_cast<int>((obj->position.x + obj->radius + worldWidth/2) / cellSize);
+        int minY = static_cast<int>((obj->position.y - obj->radius + worldHeight/2) / cellSize);
+        int maxY = static_cast<int>((obj->position.y + obj->radius + worldHeight/2) / cellSize);
+
+        // Clamp to grid boundaries
+        minX = std::max(0, std::min(minX, gridWidth - 1));
+        maxX = std::max(0, std::min(maxX, gridWidth - 1));
+        minY = std::max(0, std::min(minY, gridHeight - 1));
+        maxY = std::max(0, std::min(maxY, gridHeight - 1));
+
+        // Insert the object into all cells it occupies
+        for (int y = minY; y <= maxY; ++y) {
+            for (int x = minX; x <= maxX; ++x) {
+                grid[y * gridWidth + x].objects.push_back(obj);
+            }
+        }
+    }
+
+    std::vector<Object*> getNeighbors(const Object& obj) {
+        std::vector<Object*> neighbors;
+        std::unordered_set<Object*> uniqueNeighbors;  // To avoid duplicates
+
+        // Calculate the range of cells to check
+        int minX = static_cast<int>((obj.position.x - obj.radius - cellSize + worldWidth/2) / cellSize);
+        int maxX = static_cast<int>((obj.position.x + obj.radius + cellSize + worldWidth/2) / cellSize);
+        int minY = static_cast<int>((obj.position.y - obj.radius - cellSize + worldHeight/2) / cellSize);
+        int maxY = static_cast<int>((obj.position.y + obj.radius + cellSize + worldHeight/2) / cellSize);
+
+        // Clamp to grid boundaries
+        minX = std::max(0, std::min(minX, gridWidth - 1));
+        maxX = std::max(0, std::min(maxX, gridWidth - 1));
+        minY = std::max(0, std::min(minY, gridHeight - 1));
+        maxY = std::max(0, std::min(maxY, gridHeight - 1));
+
+        for (int y = minY; y <= maxY; ++y) {
+            for (int x = minX; x <= maxX; ++x) {
+                for (Object* neighbor : grid[y * gridWidth + x].objects) {
+                    if (neighbor != &obj && uniqueNeighbors.insert(neighbor).second) {
+                        neighbors.push_back(neighbor);
+                    }
+                }
+            }
+        }
+
+        return neighbors;
+    }
+};
+
+// Thread Pool implementation
+
+class ThreadPool {
+public:
+    ThreadPool(size_t numThreads) : stop(false) {
+        for(size_t i = 0; i < numThreads; ++i) {
+            workers.emplace_back(
+                [this] {
+                    while(true) {
+                        std::function<void()> task;
+                        {
+                            std::unique_lock<std::mutex> lock(this->queue_mutex);
+                            this->condition.wait(lock,
+                                [this] { return this->stop || !this->tasks.empty(); });
+                            if(this->stop && this->tasks.empty())
+                                return;
+                            task = std::move(this->tasks.front());
+                            this->tasks.pop();
+                        }
+                        task();
+                    }
+                }
+            );
+        }
+    }
+
+    template<class F, class... Args>
+    auto enqueue(F&& f, Args&&... args)
+        -> std::future<typename std::invoke_result<F, Args...>::type> {
+        using return_type = typename std::invoke_result<F, Args...>::type;
+
+        auto task = std::make_shared< std::packaged_task<return_type()> >(
+                std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+            );
+
+        std::future<return_type> res = task->get_future();
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            if(stop)
+                throw std::runtime_error("enqueue on stopped ThreadPool");
+            tasks.emplace([task](){ (*task)(); });
+        }
+        condition.notify_one();
+        return res;
+    }
+
+    ~ThreadPool() {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            stop = true;
+        }
+        condition.notify_all();
+        for(std::thread &worker: workers)
+            worker.join();
+    }
+
+private:
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+    std::mutex queue_mutex;
+    std::condition_variable condition;
+    bool stop;
+};
+
+// ----
 void updateObjectTrail(Object& obj) {
     if (obj.trail.empty()) {
         obj.trail.push_back(obj.position);
@@ -154,21 +306,22 @@ void handleCollision(Object& obj1, Object& obj2) {
     }
 }
 
-// Calculate acceleration due to gravity between two objects, acceleration for first object is returned
-Vector2 gravity(Object& object1, std::vector<Object>& objects) {
+std::mutex cout_mutex;
+std::atomic<bool> simulation_running(true);
 
+// Simplified parallel gravity calculation
+Vector2 calculateGravity(const Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
     Vector2 totalAcceleration = {0.0f, 0.0f};
 
-    for (auto& object2 : objects) {
-        // Skip if it's the same object
+    for (size_t i = start; i < end; ++i) {
+        const auto& object2 = objects[i];
         if (&object1 == &object2) continue;
-
-        if (checkCollision(object1, object2)) {
-            handleCollision(object1, object2);
-        };
 
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
+
+        if (r2 < 1e-12) continue;  // Avoid division by zero
+
         double r = std::sqrt(r2);
 
         // Avoid division by zero
@@ -176,7 +329,6 @@ Vector2 gravity(Object& object1, std::vector<Object>& objects) {
 
         double force = 6.67430e-11 * object2.mass / (r2 * r);
 
-        // Avoid teleporatation due to obscene force
         double MAX_FORCE = 10000.0f;
         force = std::min(force, MAX_FORCE);
 
@@ -186,14 +338,69 @@ Vector2 gravity(Object& object1, std::vector<Object>& objects) {
     return totalAcceleration;
 }
 
-// Updates the physical state of an object over a given time step
-void updateObject(Object& obj, std::vector<Object>& all_objects, const double delta_time) {
-    obj.acceleration = gravity(obj, all_objects);
-    obj.velocity = obj.velocity + obj.acceleration * delta_time;
-    obj.position = obj.position + obj.velocity * delta_time;
+void updateObjectsChunk(std::vector<Object>& objects, size_t start, size_t end, double delta_time) {
+    for (size_t i = start; i < end; ++i) {
+        Object& obj = objects[i];
 
-    // Update the object's trail for rendering motion trail
-    updateObjectTrail(obj);
+        // Calculate gravity for this object
+        Vector2 acceleration = calculateGravity(obj, objects, 0, objects.size());
+
+        // Update object's state
+        obj.acceleration = acceleration;
+        obj.velocity = obj.velocity + obj.acceleration * delta_time;
+        obj.position = obj.position + obj.velocity * delta_time;
+
+        updateObjectTrail(obj);
+    }
+}
+
+void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
+    const size_t numObjects = allObjects.size();
+    // Determine the number of threads available on the system
+    const size_t numThreads = std::thread::hardware_concurrency();
+    // Calculate the number of objects each thread will process
+    // Ensure at least 1 object per chunk to avoid division by zero
+    const size_t chunkSize = std::max(size_t(1), numObjects / numThreads);
+
+    std::vector<std::future<void>> futures;
+
+    // Divide the objects into chunks and process each chunk in parallel
+    for (size_t i = 0; i < numObjects; i += chunkSize) {
+        // Calculate the end index for this chunk, ensuring we don't go past the array bounds
+        size_t end = std::min(i + chunkSize, numObjects);
+        // Enqueue a task to process this chunk of objects
+        futures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
+            // Process each object in this chunk
+            for (size_t j = i; j < end; ++j) {
+                Object& obj = allObjects[j];
+                Vector2 acceleration = calculateGravity(obj, allObjects, 0, allObjects.size());
+                obj.acceleration = acceleration;
+                obj.velocity = obj.velocity + obj.acceleration * delta_time;
+                obj.position = obj.position + obj.velocity * delta_time;
+                updateObjectTrail(obj);
+            }
+        }));
+    }
+
+    for (auto& future : futures) {
+        future.get();
+    }
+
+    // Clear and rebuild the spatial grid
+    grid.clear();
+    for (auto& obj : allObjects) {
+        grid.insert(&obj);
+    }
+
+    // Handle collisions
+    for (size_t i = 0; i < allObjects.size(); i++) {
+        auto neighbors = grid.getNeighbors(allObjects[i]);
+        for (auto* neighbor : neighbors) {
+            if (checkCollision(allObjects[i], *neighbor)) {
+                handleCollision(allObjects[i], *neighbor);
+            }
+        }
+    }
 }
 
 // -- Objects which can be drawn
@@ -234,7 +441,7 @@ void drawObject(const Object& obj) {
     if constexpr (ENABLE_TRAIL) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
             double alpha = static_cast<double>(i) / obj.trail.size();
-            double trailRadius = obj.radius * MAX_TRAIL_SIZE * alpha;
+            double trailRadius = obj.radius * 0.5 * alpha;
             drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
         }
     };
@@ -243,39 +450,14 @@ void drawObject(const Object& obj) {
     drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
 }
 
-std::vector<Object> get_objects() {
-    std::vector<Object> all_objects;
+//Used to set the color of an object
+void set_color(Object& obj, double r, double g, double b) {
 
-    // Create and add objects
-    for (int i=0; i < 25; i++) {
-        for (int j=0; j < 25; j++) {
-            const float r = float(i)/(24.0f * 0.9f) + 0.10f;
-            const float g = float(j)/(24.0f * 0.9f) + 0.10f;
-            const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
+    obj.r = r;
+    obj.g = g;
+    obj.b = b;
 
-            all_objects.push_back(Object({-0.5 + i * 0.04f,  j * 0.04f}, {0.0f,0.0f}, 1e5, 0.06, r, g, b));
-        }
-    }
-
-    all_objects.push_back(Object({0.02,  -0.5f}, {0.0f, 0.0f}, 5e12, 5e3, 1.0, 1.0, 1.0));
-
-    return all_objects;
-
-};
-
-// Render physics aka calculate physics
-void render_physics(std::vector<Object>& all_objects) {
-
-    // param all_objects: list of objects, all objects to be calculated
-    // param delta_time, double. Time taken from last update. Smaller values gives more accuracy in physics
-
-    double constexpr delta_time = double(1.0) / double(REFRESH_RATE);
-
-    for (auto& obj : all_objects) {
-        updateObject(obj, all_objects, delta_time);
-    };
-};
-
+}
 
 // Renders the screen window based on objects on it
 void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
@@ -296,16 +478,14 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
 
 };
 
-int main()
-{
-
+int main() {
     // Initialize GLFW
     if (!glfwInit()) {
         return -1;
     }
 
     // Create a windowed mode window and its OpenGL context
-    GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "GRAVITY", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1000, 1000, "GRAVITY", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         return -1;
@@ -313,22 +493,42 @@ int main()
 
     // Make the window's context current
     glfwMakeContextCurrent(window);
-
     // Initialize objects
-    std::vector<Object> all_objects = get_objects();
 
-    // Window loop. Loop until the user closes the window
+    std::vector<Object> allObjects;
+
+    // Create and add objects
+    // Create and add objects
+    for (int i=0; i < 25; i++) {
+        for (int j=0; j < 25; j++) {
+            const float r = float(i)/(24.0f * 0.9f) + 0.10f;
+            const float g = float(j)/(24.0f * 0.9f) + 0.10f;
+            const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
+
+            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{1.5f, 0.0f}, 1e5, 0.1, r, g, b);
+        }
+    }
+    allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 0.0, 0.0, 1.0);
+
+
+    double constexpr delta_time = 1.0f / REFRESH_RATE;
+
+    SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
+    ThreadPool pool(std::thread::hardware_concurrency()); // Hardware conc returns the amount of supported concurrent threads
+
+
+    // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
+        updateSimulation(allObjects, grid, pool, delta_time);
+        render_screen(allObjects, window);
 
-        render_physics(all_objects);
-        render_screen(all_objects, window);
-
+        // Set the refresh rate
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
     }
 
     glfwTerminate();
     return 0;
 }
-
 /*
  * arity: 3
  * C(I(Z,Z), C(P1,P3,P2), Z)

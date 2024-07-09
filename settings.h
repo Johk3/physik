@@ -7,7 +7,7 @@
 
 // PHYSICS SETTINGS
 #define BOUNCE_FACTOR 1.0       // Restitution. Collision stuff
-#define SIMULATION_ACCURACY 0.3 // Low value -> High accuracy and bad fps
+#define SIMULATION_ACCURACY 0.3     // Low value -> High accuracy and bad fps
 
 // TRAIL SETTINGS
 #define ENABLE_TRAIL true       // Enable or disable trail
@@ -23,7 +23,6 @@
 #define WINDOW_HEIGHT 1440
 #define WINDOW_WIDTH 1440
 #define ENABLE_THREADING true
-#define MAX_THREADS 3
 
 
 #endif //SETTINGS_H
