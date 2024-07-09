@@ -498,14 +498,13 @@ int main() {
     std::vector<Object> allObjects;
 
     // Create and add objects
-    // Create and add objects
     for (int i=0; i < 25; i++) {
         for (int j=0; j < 25; j++) {
             const float r = float(i)/(24.0f * 0.9f) + 0.10f;
             const float g = float(j)/(24.0f * 0.9f) + 0.10f;
             const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
 
-            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{1.5f, 0.0f}, 1e5, 0.1, r, g, b);
+            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{0.0f, 0.0f}, 1e5, 0.1, r, g, b);
         }
     }
     allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 0.0, 0.0, 1.0);
@@ -519,8 +518,20 @@ int main() {
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
         updateSimulation(allObjects, grid, pool, delta_time);
-        render_screen(allObjects, window);
+
+        // Draw all objects
+        for (const auto& obj : allObjects) {
+            drawObject(obj);
+        }
+
+        // Swap the back buffer with the front
+        glfwSwapBuffers(window);
+        // Listen for any events
+        glfwPollEvents();
 
         // Set the refresh rate
         std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
