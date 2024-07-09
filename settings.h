@@ -12,7 +12,7 @@
 #define MIN_GRAVITY_MASS 1e7    // Minimum mass for an object to have a gravitational field
 
 // TRAIL SETTINGS
-#define ENABLE_TRAIL false       // Enable or disable trail
+#define ENABLE_TRAIL true       // Enable or disable trail
 #define SPACING 0.05f          // for trail spacing
 #define TRAIL_LENGTH 10         // How many trail "dots" per object
 #define MAX_TRAIL_SIZE 0.5      // The max size of the trail compared to the main object

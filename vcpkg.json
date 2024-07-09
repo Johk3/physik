@@ -29,5 +29,8 @@
   }, {
     "name" : "vcpkg-cmake-config",
     "version>=" : "2024-05-23"
+  }, {
+    "name" : "imgui",
+    "version>=" : "1.90.7"
   } ]
 }

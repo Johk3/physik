@@ -20,6 +20,9 @@
 #include <functional>
 #include <stdexcept>
 #include <unordered_set>
+#include <imgui.h>
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 
 struct Vector2 {
     double x, y;
@@ -80,9 +83,94 @@ public:
 
     // Trail
     std::vector<Vector2> trail;
-    static constexpr double TRAIL_SPACING = SPACING;  // Fixed distance between trail dots
-    static constexpr size_t MAX_TRAIL_LENGTH = TRAIL_LENGTH;  // Maximum number of trail dots
+    float TRAIL_SPACING;  // Fixed distance between trail dots
+    size_t MAX_TRAIL_LENGTH;  // Maximum number of trail dots
 };
+
+// Initialize static members outside the class
+float g_trailSpacing = SPACING;
+size_t g_maxTrailLength = TRAIL_LENGTH;
+
+
+// CONTROL PANEL --
+// Global variables for FPS calculation
+double lastTime = 0.0;
+int frameCount = 0;
+double fps = 0.0;
+
+// Global variables for adjustable settings
+float g_spacing = SPACING;
+int g_trailLength = TRAIL_LENGTH;
+
+// Function to calculate and update FPS
+void updateFPS() {
+    double currentTime = glfwGetTime();
+    frameCount++;
+
+    if (currentTime - lastTime >= 1.0) {
+        fps = static_cast<double>(frameCount) / (currentTime - lastTime);
+        frameCount = 0;
+        lastTime = currentTime;
+    }
+}
+
+// Function to render the control panel
+void renderControlPanel(GLFWwindow* controlWindow) {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    // Get the size of the control window
+    int width, height;
+    glfwGetWindowSize(controlWindow, &width, &height);
+
+    // Create a full-window ImGui window without padding or borders
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+    ImGui::Begin("Control Panel", nullptr,
+                 ImGuiWindowFlags_NoTitleBar |
+                 ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_NoMove |
+                 ImGuiWindowFlags_NoCollapse |
+                 ImGuiWindowFlags_NoSavedSettings |
+                 ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    // TODO: The draggability doesnt work yet
+    // Add a draggable area at the top of the window
+    ImGui::TextColored(ImVec4(0.5f, 1.5f, 0.5f, 1.0f), "Control Panel");
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
+        int x, y;
+        glfwGetWindowPos(controlWindow, &x, &y);
+        ImVec2 delta = ImGui::GetIO().MouseDelta;
+        glfwSetWindowPos(controlWindow, x + delta.x, y + delta.y);
+    }
+
+    ImGui::Separator();
+    ImGui::Text("FPS: %.1f", fps);
+
+    ImGui::InputFloat("Trail Spacing", &g_trailSpacing, 0.001f, 0.01f, "%.3f");
+    g_trailSpacing = std::max(0.001f, std::min(0.1f, g_trailSpacing));
+
+    ImGui::InputInt("Trail Length", reinterpret_cast<int*>(&g_maxTrailLength));
+    g_maxTrailLength = std::max(size_t(10), std::min(size_t(1000), g_maxTrailLength));
+
+    ImGui::Text("Current Trail Spacing: %.3f", g_trailSpacing);
+    ImGui::Text("Current Trail Length: %zu", g_maxTrailLength);
+
+    ImGui::End();
+
+    ImGui::Render();
+    int display_w, display_h;
+    glfwGetFramebufferSize(controlWindow, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);  // Transparent background
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+// CONTROL PANEL --
+
+
 
 // -- OPTIMIZATIONS --
 // Optimized SpatialGrid
@@ -174,12 +262,12 @@ void updateObjectTrail(Object& obj) {
     const Vector2 diff = obj.position - lastPosition;
     double distance = diff.length();
 
-    if (distance >= Object::TRAIL_SPACING) {
+    if (distance >= obj.TRAIL_SPACING) {
         // Calculate how many new dots we need to add
-        const int numNewDots = static_cast<int>(distance / Object::TRAIL_SPACING);
+        const int numNewDots = static_cast<int>(distance / obj.TRAIL_SPACING);
 
         for (int i = 0; i < numNewDots; ++i) {
-            const double t = (i + 1) * Object::TRAIL_SPACING / distance;
+            const double t = (i + 1) * obj.TRAIL_SPACING / distance;
             Vector2 newDotPosition = {
                 lastPosition.x + diff.x * t,
                 lastPosition.y + diff.y * t
@@ -187,7 +275,7 @@ void updateObjectTrail(Object& obj) {
             obj.trail.push_back(newDotPosition);
 
             // Remove oldest dot if we exceed the maximum trail length
-            if (obj.trail.size() > Object::MAX_TRAIL_LENGTH) {
+            if (obj.trail.size() > obj.MAX_TRAIL_LENGTH) {
                 obj.trail.erase(obj.trail.begin());
             }
         }
@@ -418,14 +506,34 @@ int main() {
     }
 
     // Create a windowed mode window and its OpenGL context
-    GLFWwindow* window = glfwCreateWindow(1000, 1000, "GRAVITY", nullptr, nullptr);
-    if (!window) {
+    GLFWwindow* simulationWindow = glfwCreateWindow(1000, 1000, "GRAVITY", nullptr, nullptr);
+    if (!simulationWindow) {
         glfwTerminate();
         return -1;
     }
 
+    // Create control panel window
+    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+    GLFWwindow* controlWindow = glfwCreateWindow(300, 200, "Control Panel", nullptr, nullptr);
+    glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);  // Reset for future windows
+    if (!controlWindow) {
+        glfwDestroyWindow(simulationWindow);
+        glfwTerminate();
+        return -1;
+    }
+
+    // Set up ImGui for control panel
+    glfwMakeContextCurrent(controlWindow);
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    // Dark style
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(controlWindow, true);
+    ImGui_ImplOpenGL3_Init("#version 130");
+
     // Make the window's context current
-    glfwMakeContextCurrent(window);
+    glfwMakeContextCurrent(simulationWindow);
 
     // Initialize objects
     std::vector<Object> allObjects = get_objects();
@@ -436,12 +544,42 @@ int main() {
 
 
     // Loop until the user closes the window
-    while (!glfwWindowShouldClose(window)) {
-
+    while (!glfwWindowShouldClose(simulationWindow) && !glfwWindowShouldClose(controlWindow)) {
+        // Update Simulation
         updateSimulation(allObjects, grid, pool, delta_time);
-        render_screen(allObjects, window);
+
+        // Update all objects with new trail values
+        for (auto& obj : allObjects) {
+            obj.TRAIL_SPACING = g_trailSpacing;
+            obj.MAX_TRAIL_LENGTH = g_maxTrailLength;
+        }
+
+        // Render simulation window
+        glfwMakeContextCurrent(simulationWindow);
+        render_screen(allObjects, simulationWindow);
+
+        // Update FPS
+        updateFPS();
+
+        // Render control panel
+        glfwMakeContextCurrent(controlWindow);
+        renderControlPanel(controlWindow);
+        glfwSwapBuffers(controlWindow);
+
+        // Poll for and process events
+        glfwPollEvents();
+
+        // Set the refresh rate
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
     }
 
+    // Cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    glfwDestroyWindow(simulationWindow);
+    glfwDestroyWindow(controlWindow);
     glfwTerminate();
     return 0;
 }

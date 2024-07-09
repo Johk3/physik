@@ -17,6 +17,7 @@ This project requires the following libraries:
 
 - GLEW (OpenGL Extension Wrangler Library)
 - GLFW3 (Graphics Library Framework)
+- imgui (included in the project)
 - linmath.h (included in the project)
 
 ## Building the Project
