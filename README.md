@@ -9,6 +9,14 @@ This project demonstrates a simple OpenGL application using GLFW3 and GLEW. It c
       <img src="img/big_collision.png" alt="Second Image" title="big collision with a massive body" />
     </td>
   </tr>
+  <tr>
+    <td>
+      <img src="img/controlpan.png" alt="First Image" title="small orbit" />
+    </td>
+    <td>
+      <img src="img/bigguy.png" alt="Second Image" title="big collision with a massive body" />
+    </td>
+  </tr>
 </table>
 
 ## Dependencies
