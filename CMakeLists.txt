@@ -11,6 +11,7 @@ find_package(glad REQUIRED)
 add_executable(physik main.cpp
         linmath.h
         settings.h
+        ThreadPool.h
 )
 
 target_link_libraries(physik glfw)

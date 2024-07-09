@@ -11,13 +11,13 @@
 #include <vector>
 #include <memory>
 #include "settings.h"
+#include "ThreadPool.h"
 #include <vector>
 #include <queue>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <functional>
-#include <future>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -162,69 +162,6 @@ public:
     }
 };
 
-// Thread Pool implementation
-
-class ThreadPool {
-public:
-    ThreadPool(size_t numThreads) : stop(false) {
-        for(size_t i = 0; i < numThreads; ++i) {
-            workers.emplace_back(
-                [this] {
-                    while(true) {
-                        std::function<void()> task;
-                        {
-                            std::unique_lock<std::mutex> lock(this->queue_mutex);
-                            this->condition.wait(lock,
-                                [this] { return this->stop || !this->tasks.empty(); });
-                            if(this->stop && this->tasks.empty())
-                                return;
-                            task = std::move(this->tasks.front());
-                            this->tasks.pop();
-                        }
-                        task();
-                    }
-                }
-            );
-        }
-    }
-
-    template<class F, class... Args>
-    auto enqueue(F&& f, Args&&... args)
-        -> std::future<typename std::invoke_result<F, Args...>::type> {
-        using return_type = typename std::invoke_result<F, Args...>::type;
-
-        auto task = std::make_shared< std::packaged_task<return_type()> >(
-                std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-            );
-
-        std::future<return_type> res = task->get_future();
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            if(stop)
-                throw std::runtime_error("enqueue on stopped ThreadPool");
-            tasks.emplace([task](){ (*task)(); });
-        }
-        condition.notify_one();
-        return res;
-    }
-
-    ~ThreadPool() {
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            stop = true;
-        }
-        condition.notify_all();
-        for(std::thread &worker: workers)
-            worker.join();
-    }
-
-private:
-    std::vector<std::thread> workers;
-    std::queue<std::function<void()>> tasks;
-    std::mutex queue_mutex;
-    std::condition_variable condition;
-    bool stop;
-};
 
 // ----
 void updateObjectTrail(Object& obj) {
@@ -310,12 +247,15 @@ std::mutex cout_mutex;
 std::atomic<bool> simulation_running(true);
 
 // Simplified parallel gravity calculation
-Vector2 calculateGravity(const Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-    Vector2 totalAcceleration = {0.0f, 0.0f};
+void calculate_gravity(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+
+    // Reset acceleration
+    object1.acceleration = {0.0, 0.0};
 
     for (size_t i = start; i < end; ++i) {
         const auto& object2 = objects[i];
         if (&object1 == &object2) continue;
+        if (object2.mass < MIN_GRAVITY_MASS) continue;
 
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
@@ -332,29 +272,12 @@ Vector2 calculateGravity(const Object& object1, const std::vector<Object>& objec
         double MAX_FORCE = 10000.0f;
         force = std::min(force, MAX_FORCE);
 
-        totalAcceleration = totalAcceleration + diff * force;
-    }
-
-    return totalAcceleration;
-}
-
-void updateObjectsChunk(std::vector<Object>& objects, size_t start, size_t end, double delta_time) {
-    for (size_t i = start; i < end; ++i) {
-        Object& obj = objects[i];
-
-        // Calculate gravity for this object
-        Vector2 acceleration = calculateGravity(obj, objects, 0, objects.size());
-
-        // Update object's state
-        obj.acceleration = acceleration;
-        obj.velocity = obj.velocity + obj.acceleration * delta_time;
-        obj.position = obj.position + obj.velocity * delta_time;
-
-        updateObjectTrail(obj);
+        object1.acceleration = object1.acceleration + diff * force;
     }
 }
 
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
+
     const size_t numObjects = allObjects.size();
     // Determine the number of threads available on the system
     const size_t numThreads = std::thread::hardware_concurrency();
@@ -373,8 +296,7 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
             // Process each object in this chunk
             for (size_t j = i; j < end; ++j) {
                 Object& obj = allObjects[j];
-                Vector2 acceleration = calculateGravity(obj, allObjects, 0, allObjects.size());
-                obj.acceleration = acceleration;
+                calculate_gravity(obj, allObjects, 0, allObjects.size());
                 obj.velocity = obj.velocity + obj.acceleration * delta_time;
                 obj.position = obj.position + obj.velocity * delta_time;
                 updateObjectTrail(obj);
@@ -469,6 +391,26 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
 
 };
 
+std::vector<Object> get_objects() {
+
+    std::vector<Object> allObjects;
+
+    // Create and add objects
+    for (int i=0; i < 25; i++) {
+        for (int j=0; j < 25; j++) {
+            const float r = float(i)/(24.0f * 0.9f) + 0.10f;
+            const float g = float(j)/(24.0f * 0.9f) + 0.10f;
+            const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
+
+            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{0.0f, 0.0f}, 1e5, 0.1, r, g, b);
+        }
+    }
+    allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0);
+
+    return allObjects;
+
+};
+
 int main() {
     // Initialize GLFW
     if (!glfwInit()) {
@@ -484,23 +426,9 @@ int main() {
 
     // Make the window's context current
     glfwMakeContextCurrent(window);
+
     // Initialize objects
-
-    std::vector<Object> allObjects;
-
-    // Create and add objects
-    for (int i=0; i < 25; i++) {
-        for (int j=0; j < 25; j++) {
-            const float r = float(i)/(24.0f * 0.9f) + 0.10f;
-            const float g = float(j)/(24.0f * 0.9f) + 0.10f;
-            const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
-
-            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{0.0f, 0.0f}, 1e5, 0.1, r, g, b);
-        }
-    }
-    allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 0.0, 0.0, 1.0);
-
-
+    std::vector<Object> allObjects = get_objects();
     double constexpr delta_time = 1.0f / REFRESH_RATE;
 
     SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
@@ -509,11 +437,9 @@ int main() {
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
-        updateSimulation(allObjects, grid, pool, delta_time);
 
+        updateSimulation(allObjects, grid, pool, delta_time);
         render_screen(allObjects, window);
-        // Set the refresh rate
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
     }
 
     glfwTerminate();
