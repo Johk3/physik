@@ -7,13 +7,13 @@
 
 // PHYSICS SETTINGS
 #define BOUNCE_FACTOR 1.0       // Restitution. Collision stuff
-#define SIMULATION_ACCURACY 0.3     // Low value -> High accuracy and bad fps
+#define SIMULATION_ACCURACY 0.3 // Low value -> High accuracy and bad fps
 
 // TRAIL SETTINGS
-#define ENABLE_TRAIL true
-// Enable or disable trail
-#define SPACING 0.05f           // for trail spacing
-#define TRAIL_LENGTH 10         // How many trail "dots" per object
+#define ENABLE_TRAIL true       // Enable or disable trail
+#define SPACING 0.003f          // for trail spacing
+#define TRAIL_LENGTH 50         // How many trail "dots" per object
+#define MAX_TRAIL_SIZE 1.0      // The max size of the trail compared to the main object
 
 // OTHER SETTINGS
 #define CONST_RADIUS 10.0f      // Default radius of ball (og code)
@@ -23,6 +23,7 @@
 #define WINDOW_HEIGHT 1440
 #define WINDOW_WIDTH 1440
 #define ENABLE_THREADING true
+#define MAX_THREADS 3
 
 
 #endif //SETTINGS_H
