@@ -88,8 +88,12 @@ public:
 };
 
 // Initialize static members outside the class
-float g_trailSpacing = SPACING;
-size_t g_maxTrailLength = TRAIL_LENGTH;
+double g_trailSpacing = SPACING;
+double g_maxTrailLength = TRAIL_LENGTH;
+double g_bounceFactor = BOUNCE_FACTOR;
+double g_scaleFactor = SCALE_FACTOR;
+double g_circleSegments = CIRCLE_SEGMENTS;
+int g_refreshRate = REFRESH_RATE;
 
 
 // CONTROL PANEL --
@@ -120,11 +124,9 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // Get the size of the control window
     int width, height;
     glfwGetWindowSize(controlWindow, &width, &height);
 
-    // Create a full-window ImGui window without padding or borders
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(width, height));
     ImGui::Begin("Control Panel", nullptr,
@@ -146,16 +148,40 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     }
 
     ImGui::Separator();
+
+
     ImGui::Text("FPS: %.1f", fps);
 
-    ImGui::InputFloat("Trail Spacing", &g_trailSpacing, 0.001f, 0.01f, "%.3f");
-    g_trailSpacing = std::max(0.001f, std::min(0.1f, g_trailSpacing));
+    // Trail Spacing
+    ImGui::InputDouble("Trail Spacing", &g_trailSpacing, 0.001, 0.01, "%.3f");
+    g_trailSpacing = std::max(0.001, std::min(0.1, g_trailSpacing));
 
-    ImGui::InputInt("Trail Length", reinterpret_cast<int*>(&g_maxTrailLength));
-    g_maxTrailLength = std::max(size_t(10), std::min(size_t(1000), g_maxTrailLength));
+    // Trail Length
+    ImGui::InputDouble("Trail Length", &g_maxTrailLength, 1.0, 10.0);
+    g_maxTrailLength = std::max(10.0, std::min(1000.0, g_maxTrailLength));
+
+    // Bounce Factor
+    ImGui::InputDouble("Bounce Factor", &g_bounceFactor, 0.01, 0.1, "%.2f");
+    g_bounceFactor = std::max(0.0, std::min(1.0, g_bounceFactor));
+
+    // Scale Factor
+    ImGui::InputDouble("Scale Factor", &g_scaleFactor, 0.1, 1.0, "%.2f");
+    g_scaleFactor = std::max(0.1, std::min(100.0, g_scaleFactor));
+
+    // Circle Segments
+    ImGui::InputDouble("Circle Segments", &g_circleSegments, 1.0, 10.0);
+    g_circleSegments = std::max(3.0, std::min(100.0, g_circleSegments));
+
+    // Refresh Rate
+    ImGui::InputInt("Refresh Rate", &g_refreshRate, 100.0, 1000.0);
+    g_refreshRate = std::max(1, std::min(100000, g_refreshRate));
 
     ImGui::Text("Current Trail Spacing: %.3f", g_trailSpacing);
-    ImGui::Text("Current Trail Length: %zu", g_maxTrailLength);
+    ImGui::Text("Current Trail Length: %.0f", g_maxTrailLength);
+    ImGui::Text("Current Bounce Factor: %.2f", g_bounceFactor);
+    ImGui::Text("Current Scale Factor: %.2f", g_scaleFactor);
+    ImGui::Text("Current Circle Segments: %.0f", g_circleSegments);
+    ImGui::Text("Current Refresh Rate: %d", g_refreshRate);
 
     ImGui::End();
 
@@ -163,11 +189,10 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     int display_w, display_h;
     glfwGetFramebufferSize(controlWindow, &display_w, &display_h);
     glViewport(0, 0, display_w, display_h);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);  // Transparent background
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
-
 // CONTROL PANEL --
 
 
@@ -307,7 +332,7 @@ void handleCollision(Object& obj1, Object& obj2) {
         return;
 
     // Calculate impulse scalar
-    float impulseScalar = - (1 + BOUNCE_FACTOR) * velocityAlongNormal;
+    float impulseScalar = - (1 + g_bounceFactor) * velocityAlongNormal;
     impulseScalar /= 1 / obj1.mass  +  1 / obj2.mass;
 
     // Apply impulse
@@ -434,8 +459,8 @@ void drawCircle(const double x, const double y, const double radius, const doubl
     glColor4d(r, g, b, alpha);
     glBegin(GL_TRIANGLE_FAN);
     glVertex2d(x, y);
-    for (int i = 0; i <= CIRCLE_SEGMENTS; i++) {
-        const double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(CIRCLE_SEGMENTS);
+    for (int i = 0; i <= g_circleSegments; i++) {
+        const double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(g_circleSegments);
         const double dx = radius * std::cos(theta);
         const double dy = radius * std::sin(theta);
         glVertex2d(x + dx, y + dy);
@@ -514,7 +539,7 @@ int main() {
 
     // Create control panel window
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow* controlWindow = glfwCreateWindow(300, 200, "Control Panel", nullptr, nullptr);
+    GLFWwindow* controlWindow = glfwCreateWindow(350, 350, "Control Panel", nullptr, nullptr);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);  // Reset for future windows
     if (!controlWindow) {
         glfwDestroyWindow(simulationWindow);
@@ -537,7 +562,6 @@ int main() {
 
     // Initialize objects
     std::vector<Object> allObjects = get_objects();
-    double constexpr delta_time = 1.0f / REFRESH_RATE;
 
     SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
     ThreadPool pool(std::thread::hardware_concurrency()); // Hardware conc returns the amount of supported concurrent threads
@@ -546,12 +570,13 @@ int main() {
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(simulationWindow) && !glfwWindowShouldClose(controlWindow)) {
         // Update Simulation
-        updateSimulation(allObjects, grid, pool, delta_time);
+        updateSimulation(allObjects, grid, pool, 1.0 / g_refreshRate);
 
         // Update all objects with new trail values
         for (auto& obj : allObjects) {
             obj.TRAIL_SPACING = g_trailSpacing;
             obj.MAX_TRAIL_LENGTH = g_maxTrailLength;
+            obj.radius = (std::cbrt((3 * obj.mass) / (4 * 3.141592 * obj.density)) / (1000 * g_scaleFactor));
         }
 
         // Render simulation window
@@ -570,7 +595,7 @@ int main() {
         glfwPollEvents();
 
         // Set the refresh rate
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000/g_refreshRate));
     }
 
     // Cleanup

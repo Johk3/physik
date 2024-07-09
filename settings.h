@@ -15,7 +15,6 @@
 #define ENABLE_TRAIL true       // Enable or disable trail
 #define SPACING 0.05f          // for trail spacing
 #define TRAIL_LENGTH 10         // How many trail "dots" per object
-#define MAX_TRAIL_SIZE 0.5      // The max size of the trail compared to the main object
 
 // GRAPHICS SETTINGS
 #define CIRCLE_SEGMENTS 32      // Number of segments in circle rendering
@@ -24,7 +23,6 @@
 
 // PERFORMANCE SETTINGS
 #define ENABLE_THREADING true
-#define SIMULATION_ACCURACY 0.3     // Low value -> High accuracy and bad fps
 #define REFRESH_RATE 5000       // Hz. Improves physics accuracy but will slow time down
 
 #endif //SETTINGS_H
