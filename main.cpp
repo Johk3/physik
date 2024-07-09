@@ -450,15 +450,6 @@ void drawObject(const Object& obj) {
     drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
 }
 
-//Used to set the color of an object
-void set_color(Object& obj, double r, double g, double b) {
-
-    obj.r = r;
-    obj.g = g;
-    obj.b = b;
-
-}
-
 // Renders the screen window based on objects on it
 void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
 
@@ -518,21 +509,9 @@ int main() {
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window)) {
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
         updateSimulation(allObjects, grid, pool, delta_time);
 
-        // Draw all objects
-        for (const auto& obj : allObjects) {
-            drawObject(obj);
-        }
-
-        // Swap the back buffer with the front
-        glfwSwapBuffers(window);
-        // Listen for any events
-        glfwPollEvents();
-
+        render_screen(allObjects, window);
         // Set the refresh rate
         std::this_thread::sleep_for(std::chrono::milliseconds(1000/REFRESH_RATE));
     }
