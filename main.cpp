@@ -111,7 +111,6 @@ double g_scaleFactor = SCALE_FACTOR;
 int g_circleSegments = CIRCLE_SEGMENTS;
 int g_refreshRate = REFRESH_RATE;
 int g_enable_trail = convert_bool(ENABLE_TRAIL);
-int g_enable_threading = convert_bool(ENABLE_THREADING);
 int g_enable_lod = convert_bool(ENABLE_LOD);
 int g_simulate = 1;
 
@@ -200,9 +199,6 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::InputInt("Enable Trail", &g_enable_trail, 1.0, 1.0);
     g_enable_trail = std::max(0, std::min(1, g_enable_trail));
 
-    // Enable Threading
-    ImGui::InputInt("Enable Threading", &g_enable_threading, 1.0, 1.0);
-    g_enable_threading = std::max(0, std::min(1, g_enable_threading));
 
     ImGui::InputInt("Enable LOD", &g_enable_lod, 1.0, 1.0);
     g_enable_lod = std::max(0, std::min(1, g_enable_lod));
@@ -220,11 +216,9 @@ void renderControlPanel(GLFWwindow* controlWindow) {
 
     const std::string sim_text = std::string("Simulation is: ") + ui_toggle_text(g_simulate);
     const std::string trail_text = std::string("Trail is: ") + ui_toggle_text(g_enable_trail);
-    const std::string thread_text = std::string("Threading is: ") + ui_toggle_text(g_enable_threading);
     const std::string lod_text = std::string("LOD is: ") + ui_toggle_text(g_enable_lod);
 
     ImGui::Text(trail_text.c_str());
-    ImGui::Text(thread_text.c_str());
     ImGui::Text(lod_text.c_str());
     ImGui::Text(sim_text.c_str());
 
@@ -617,7 +611,7 @@ int main() {
 
     // Create control panel window
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow* controlWindow = glfwCreateWindow(350, 450, "Control Panel", nullptr, nullptr);
+    GLFWwindow* controlWindow = glfwCreateWindow(400, 450, "Control Panel", nullptr, nullptr);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);  // Reset for future windows
     if (!controlWindow) {
         glfwDestroyWindow(simulationWindow);

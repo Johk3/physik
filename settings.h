@@ -23,7 +23,6 @@
 #define WINDOW_WIDTH 1440
 
 // PERFORMANCE SETTINGS
-#define ENABLE_THREADING true
 #define REFRESH_RATE 5000           // Hz. Improves physics accuracy but will slow time down
 #define ENABLE_LOD true             // Enable or disable LOD
 #define MIN_LOD 5                   // Minimum number of circle segments
