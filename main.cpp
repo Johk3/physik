@@ -182,7 +182,7 @@ void renderControlPanel(GLFWwindow* controlWindow) {
 
     // Bounce Factor
     ImGui::InputDouble("Bounce Factor", &g_bounceFactor, 0.1, 1.0, "%.2f");
-    g_bounceFactor = std::max(0.0, std::min(1.0, g_bounceFactor));
+    g_bounceFactor = std::max(0.0, std::min(10.0, g_bounceFactor));
 
     // Scale Factor
     ImGui::InputDouble("Scale Factor", &g_scaleFactor, 0.5, 1.0, "%.2f");
