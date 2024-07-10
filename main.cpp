@@ -19,6 +19,7 @@
 #include <condition_variable>
 #include <functional>
 #include <stdexcept>
+#include <iostream>
 #include <unordered_set>
 #include <imgui.h>
 #include "imgui_impl_glfw.h"
@@ -87,6 +88,21 @@ public:
     size_t MAX_TRAIL_LENGTH;  // Maximum number of trail dots
 };
 
+// Convert true to 1 and false to 0
+int convert_bool(bool arg) {
+    if (arg) {
+        return 1;
+    }
+
+    return 0;
+};
+
+// Convert 1 to "ON" and 0 to "OFF"
+std::string ui_toggle_text(int value) {
+    if (value == 1) { return "ON"; };
+    return "OFF";
+};
+
 // Initialize static members outside the class
 double g_trailSpacing = SPACING;
 double g_maxTrailLength = TRAIL_LENGTH;
@@ -94,6 +110,8 @@ double g_bounceFactor = BOUNCE_FACTOR;
 double g_scaleFactor = SCALE_FACTOR;
 int g_circleSegments = CIRCLE_SEGMENTS;
 int g_refreshRate = REFRESH_RATE;
+int g_enable_trail = convert_bool(ENABLE_TRAIL);
+int g_enable_threading = convert_bool(ENABLE_THREADING);
 
 
 // CONTROL PANEL --
@@ -176,12 +194,26 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::InputInt("Refresh Rate", &g_refreshRate, 100.0, 1000.0);
     g_refreshRate = std::max(1, std::min(100000, g_refreshRate));
 
+    // Enable Trail
+    ImGui::InputInt("Enable Trail", &g_enable_trail, 1.0, 1.0);
+    g_enable_trail = std::max(0, std::min(1, g_enable_trail));
+
+    // Enable Threading
+    ImGui::InputInt("Enable Threading", &g_enable_threading, 1.0, 1.0);
+    g_enable_threading = std::max(0, std::min(1, g_enable_threading));
+
     ImGui::Text("Current Trail Spacing: %.3f", g_trailSpacing);
     ImGui::Text("Current Trail Length: %.0f", g_maxTrailLength);
     ImGui::Text("Current Bounce Factor: %.2f", g_bounceFactor);
     ImGui::Text("Current Scale Factor: %.2f", g_scaleFactor);
     ImGui::Text("Current Circle Segments: %d", g_circleSegments);
     ImGui::Text("Current Refresh Rate: %d", g_refreshRate);
+
+    const std::string trail_text = std::string("Trail is: ") + ui_toggle_text(g_enable_trail);
+    const std::string thread_text = std::string("Threading is: ") + ui_toggle_text(g_enable_threading);
+
+    ImGui::Text(trail_text.c_str());
+    ImGui::Text(thread_text.c_str());
 
     ImGui::End();
 
@@ -392,34 +424,48 @@ void calculate_gravity(Object& object1, const std::vector<Object>& objects, size
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
 
     const size_t numObjects = allObjects.size();
-    // Determine the number of threads available on the system
-    const size_t numThreads = std::thread::hardware_concurrency();
-    // Calculate the number of objects each thread will process
-    // Ensure at least 1 object per chunk to avoid division by zero
-    const size_t chunkSize = std::max(size_t(1), numObjects / numThreads);
 
-    std::vector<std::future<void>> futures;
+    if (g_enable_threading == 1) {
+        // Determine the number of threads available on the system
+        const size_t numThreads = std::thread::hardware_concurrency();
+        // Calculate the number of objects each thread will process
+        // Ensure at least 1 object per chunk to avoid division by zero
+        const size_t chunkSize = std::max(size_t(1), numObjects / numThreads);
 
-    // Divide the objects into chunks and process each chunk in parallel
-    for (size_t i = 0; i < numObjects; i += chunkSize) {
-        // Calculate the end index for this chunk, ensuring we don't go past the array bounds
-        size_t end = std::min(i + chunkSize, numObjects);
-        // Enqueue a task to process this chunk of objects
-        futures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
-            // Process each object in this chunk
-            for (size_t j = i; j < end; ++j) {
-                Object& obj = allObjects[j];
-                calculate_gravity(obj, allObjects, 0, allObjects.size());
-                obj.velocity = obj.velocity + obj.acceleration * delta_time;
-                obj.position = obj.position + obj.velocity * delta_time;
-                updateObjectTrail(obj);
-            }
-        }));
-    }
+        std::vector<std::future<void>> futures;
 
-    for (auto& future : futures) {
-        future.get();
-    }
+        // Divide the objects into chunks and process each chunk in parallel
+        for (size_t i = 0; i < numObjects; i += chunkSize) {
+            // Calculate the end index for this chunk, ensuring we don't go past the array bounds
+            size_t end = std::min(i + chunkSize, numObjects);
+            // Enqueue a task to process this chunk of objects
+            futures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
+                // Process each object in this chunk
+                for (size_t j = i; j < end; ++j) {
+                    Object& obj = allObjects[j];
+                    calculate_gravity(obj, allObjects, 0, allObjects.size());
+                    obj.velocity = obj.velocity + obj.acceleration * delta_time;
+                    obj.position = obj.position + obj.velocity * delta_time;
+                    updateObjectTrail(obj);
+                }
+            }));
+        };
+
+        for (auto& future : futures) {
+            future.get();
+        }
+
+    } else {
+
+        for (size_t j = 0; j < numObjects; ++j) {
+            Object& obj = allObjects[j];
+            calculate_gravity(obj, allObjects, 0, numObjects);
+            obj.velocity = obj.velocity + obj.acceleration * delta_time;
+            obj.position = obj.position + obj.velocity * delta_time;
+            updateObjectTrail(obj);
+        }
+
+    };
 
     // Clear and rebuild the spatial grid
     grid.clear();
@@ -473,7 +519,7 @@ void drawCircle(const double x, const double y, const double radius, const doubl
 void drawObject(const Object& obj) {
 
     // Draw trail
-    if constexpr (ENABLE_TRAIL) {
+    if (g_enable_trail == 1) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
             double alpha = static_cast<double>(i) / obj.trail.size();
             double trailRadius = obj.radius * 0.5 * alpha;
@@ -539,7 +585,7 @@ int main() {
 
     // Create control panel window
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow* controlWindow = glfwCreateWindow(350, 350, "Control Panel", nullptr, nullptr);
+    GLFWwindow* controlWindow = glfwCreateWindow(350, 400, "Control Panel", nullptr, nullptr);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);  // Reset for future windows
     if (!controlWindow) {
         glfwDestroyWindow(simulationWindow);
@@ -555,7 +601,7 @@ int main() {
     // Dark style
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(controlWindow, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
+    ImGui_ImplOpenGL3_Init("#version 110");
 
     // Make the window's context current
     glfwMakeContextCurrent(simulationWindow);
