@@ -113,6 +113,7 @@ int g_refreshRate = REFRESH_RATE;
 int g_enable_trail = convert_bool(ENABLE_TRAIL);
 int g_enable_threading = convert_bool(ENABLE_THREADING);
 int g_enable_lod = convert_bool(ENABLE_LOD);
+int g_simulate = 1;
 
 
 // CONTROL PANEL --
@@ -206,6 +207,10 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::InputInt("Enable LOD", &g_enable_lod, 1.0, 1.0);
     g_enable_lod = std::max(0, std::min(1, g_enable_lod));
 
+    ImGui::InputInt("Physics simulation ", &g_simulate, 1.0, 1.0);
+    g_simulate = std::max(0, std::min(1, g_simulate));
+
+
     ImGui::Text("Current Trail Spacing: %.3f", g_trailSpacing);
     ImGui::Text("Current Trail Length: %.0f", g_maxTrailLength);
     ImGui::Text("Current Bounce Factor: %.2f", g_bounceFactor);
@@ -213,6 +218,7 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::Text("Current Circle Segments: %d", g_circleSegments);
     ImGui::Text("Current Refresh Rate: %d", g_refreshRate);
 
+    const std::string sim_text = std::string("Simulation is: ") + ui_toggle_text(g_simulate);
     const std::string trail_text = std::string("Trail is: ") + ui_toggle_text(g_enable_trail);
     const std::string thread_text = std::string("Threading is: ") + ui_toggle_text(g_enable_threading);
     const std::string lod_text = std::string("LOD is: ") + ui_toggle_text(g_enable_lod);
@@ -220,6 +226,8 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::Text(trail_text.c_str());
     ImGui::Text(thread_text.c_str());
     ImGui::Text(lod_text.c_str());
+    ImGui::Text(sim_text.c_str());
+
 
     ImGui::End();
 
@@ -637,15 +645,16 @@ int main() {
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(simulationWindow) && !glfwWindowShouldClose(controlWindow)) {
-        // Update Simulation
-        updateSimulation(allObjects, grid, pool, 1.0 / g_refreshRate);
+        if (g_simulate == 1) {
+            updateSimulation(allObjects, grid, pool, 1.0 / g_refreshRate);
 
-        // Update all objects with new trail values
-        for (auto& obj : allObjects) {
-            obj.TRAIL_SPACING = g_trailSpacing;
-            obj.MAX_TRAIL_LENGTH = g_maxTrailLength;
-            obj.radius = (std::cbrt((3 * obj.mass) / (4 * 3.141592 * obj.density)) / (1000 * g_scaleFactor));
-        }
+            // Update all objects with new trail values
+            for (auto& obj : allObjects) {
+                obj.TRAIL_SPACING = g_trailSpacing;
+                obj.MAX_TRAIL_LENGTH = g_maxTrailLength;
+                obj.radius = (std::cbrt((3 * obj.mass) / (4 * 3.141592 * obj.density)) / (1000 * g_scaleFactor));
+            }
+        };
 
         // Render simulation window
         glfwMakeContextCurrent(simulationWindow);
