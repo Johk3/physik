@@ -415,11 +415,11 @@ void calculate_gravity(Object& object1, const std::vector<Object>& objects, size
         if (object2.mass < MIN_GRAVITY_MASS) continue;
 
         Vector2 diff = object2.position - object1.position;
-        double r2 = diff.x * diff.x + diff.y * diff.y;
+        const double r2 = diff.x * diff.x + diff.y * diff.y;
 
         if (r2 < 1e-12) continue;  // Avoid division by zero
 
-        double r = std::sqrt(r2);
+        const double r = std::sqrt(r2);
 
         // Avoid division by zero
         if (r < 1e-6f) continue;
@@ -541,6 +541,7 @@ void drawObject(const Object& obj) {
     // Draw trail
     if (g_enable_trail == 1) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
+            if (std::abs(obj.trail[i].x) > PREVENT_DRAW_DISTANCE or std::abs(obj.trail[i].y) > PREVENT_DRAW_DISTANCE) continue;
             double alpha = static_cast<double>(i) / obj.trail.size();
             double trailRadius = obj.radius * TRAIL_SCALE * alpha;
             drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
@@ -548,6 +549,7 @@ void drawObject(const Object& obj) {
     };
 
     // Draw main object
+    if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
     drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
 }
 
@@ -607,7 +609,7 @@ int main() {
 
     // Create control panel window
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow* controlWindow = glfwCreateWindow(350, 450, "Control Panel", nullptr, nullptr);
+    GLFWwindow* controlWindow = glfwCreateWindow(400, 450, "Control Panel", nullptr, nullptr);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);  // Reset for future windows
     if (!controlWindow) {
         glfwDestroyWindow(simulationWindow);
