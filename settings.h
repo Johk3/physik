@@ -10,6 +10,8 @@
 #define CONST_RADIUS 10.0f          // Default radius of ball (og code)
 #define SCALE_FACTOR 10             // used to scale all objects
 #define MIN_GRAVITY_MASS 1e7        // Minimum mass for an object to have a gravitational field
+#define GRAVITY 6.67430e-11
+#define MAX_FORCE 10000.0;
 
 // TRAIL SETTINGS
 #define ENABLE_TRAIL true           // Enable or disable trail

@@ -24,6 +24,7 @@
 #include <imgui.h>
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include <immintrin.h>
 
 struct Vector2 {
     double x, y;
@@ -61,6 +62,7 @@ struct Vector2 {
     }
 
 };
+
 
 //Physical Object
 class Object {
@@ -108,6 +110,9 @@ double g_trailSpacing = SPACING;
 double g_maxTrailLength = TRAIL_LENGTH;
 double g_bounceFactor = BOUNCE_FACTOR;
 double g_scaleFactor = SCALE_FACTOR;
+double g_G = GRAVITY;
+double g_MAX_FORCE = MAX_FORCE;
+const double EPSILON = 1e-6;
 int g_circleSegments = CIRCLE_SEGMENTS;
 int g_refreshRate = REFRESH_RATE;
 int g_enable_trail = convert_bool(ENABLE_TRAIL);
@@ -170,6 +175,13 @@ void renderControlPanel(GLFWwindow* controlWindow) {
 
 
     ImGui::Text("FPS: %.1f", fps);
+    // Gravity
+    ImGui::InputDouble("Gravity", &g_G, 0.001, 0.01, "%.3f");
+    g_G = std::max(0.e-20, std::min(1e10, g_G));
+
+    // MAX FORCE
+    ImGui::InputDouble("Max Force", &g_MAX_FORCE, 100, 10000, "%.3f");
+    g_MAX_FORCE = std::max(0.01, std::min(1e10, g_MAX_FORCE));
 
     // Trail Spacing
     ImGui::InputDouble("Trail Spacing", &g_trailSpacing, 0.001, 0.01, "%.3f");
@@ -206,13 +218,15 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::InputInt("Physics simulation ", &g_simulate, 1.0, 1.0);
     g_simulate = std::max(0, std::min(1, g_simulate));
 
-
+    ImGui::Text("Current Gravity: %.3f", g_G);
+    ImGui::Text("Current Max Force: %.0f", g_MAX_FORCE);
     ImGui::Text("Current Trail Spacing: %.3f", g_trailSpacing);
     ImGui::Text("Current Trail Length: %.0f", g_maxTrailLength);
     ImGui::Text("Current Bounce Factor: %.2f", g_bounceFactor);
     ImGui::Text("Current Scale Factor: %.2f", g_scaleFactor);
     ImGui::Text("Current Circle Segments: %d", g_circleSegments);
     ImGui::Text("Current Refresh Rate: %d", g_refreshRate);
+
 
     const std::string sim_text = std::string("Simulation is: ") + ui_toggle_text(g_simulate);
     const std::string trail_text = std::string("Trail is: ") + ui_toggle_text(g_enable_trail);
@@ -399,36 +413,70 @@ void handleCollision(Object& obj1, Object& obj2) {
 std::mutex cout_mutex;
 std::atomic<bool> simulation_running(true);
 
-// New helper function for SIMD-optimized gravity calculation
-// SingleInstructionMultipleData
-void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-    // SIMD implementation of gravity calculation
-    // This is a placeholder and should be replaced with actual SIMD code
-    // TODO: I will add the SIMD Stuff here in the near future.
-    // SIMD
-
-    Vector2 acc = {0.0, 0.0};
-    for (size_t i = start; i < end; ++i) {
-        const auto& object2 = objects[i];
-        if (&object1 == &object2) continue;
-        if (object2.mass < MIN_GRAVITY_MASS) continue;
-
-        Vector2 diff = object2.position - object1.position;
-        double r2 = diff.x * diff.x + diff.y * diff.y;
-
-        if (r2 < 1e-12) continue;
-
-        double r = std::sqrt(r2);
-        if (r < 1e-6f) continue;
-
-        double force = 6.67430e-11 * object2.mass / (r2 * r);
-        double MAX_FORCE = 10000.0f;
-        force = std::min(force, MAX_FORCE);
-
-        acc = acc + diff * force;
-    }
-    object1.acceleration = acc;
+// Helper function to sum up a __m256d vector
+double _mm256_reduce_add_pd(__m256d v) {
+    __m128d vlow  = _mm256_castpd256_pd128(v);
+    __m128d vhigh = _mm256_extractf128_pd(v, 1);
+    vlow  = _mm_add_pd(vlow, vhigh);
+    __m128d high64 = _mm_unpackhi_pd(vlow, vlow);
+    return _mm_cvtsd_f64(_mm_add_sd(vlow, high64));
 }
+// SingleInstructionMultipleData Gravity using AVX architecture
+void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+    const __m256d obj1_x = _mm256_set1_pd(object1.position.x);
+    const __m256d obj1_y = _mm256_set1_pd(object1.position.y);
+    const __m256d epsilon = _mm256_set1_pd(EPSILON);
+    const __m256d max_force = _mm256_set1_pd(g_MAX_FORCE);
+    const __m256d g_const = _mm256_set1_pd(g_G);
+
+    __m256d acc_x = _mm256_setzero_pd();
+    __m256d acc_y = _mm256_setzero_pd();
+
+    for (size_t i = start; i < end; i += 4) {
+        __m256d obj2_x, obj2_y, mass;
+
+        if (i + 3 < end) {
+            obj2_x = _mm256_setr_pd(objects[i].position.x, objects[i+1].position.x, objects[i+2].position.x, objects[i+3].position.x);
+            obj2_y = _mm256_setr_pd(objects[i].position.y, objects[i+1].position.y, objects[i+2].position.y, objects[i+3].position.y);
+            mass = _mm256_setr_pd(objects[i].mass, objects[i+1].mass, objects[i+2].mass, objects[i+3].mass);
+        } else {
+            // Handle the last incomplete batch
+            double x_array[4] = {0}, y_array[4] = {0}, m_array[4] = {0};
+            for (size_t j = 0; j < end - i; ++j) {
+                x_array[j] = objects[i+j].position.x;
+                y_array[j] = objects[i+j].position.y;
+                m_array[j] = objects[i+j].mass;
+            }
+            obj2_x = _mm256_loadu_pd(x_array);
+            obj2_y = _mm256_loadu_pd(y_array);
+            mass = _mm256_loadu_pd(m_array);
+        }
+
+        __m256d dx = _mm256_sub_pd(obj2_x, obj1_x);
+        __m256d dy = _mm256_sub_pd(obj2_y, obj1_y);
+        __m256d r2 = _mm256_add_pd(_mm256_mul_pd(dx, dx), _mm256_mul_pd(dy, dy));
+        __m256d r = _mm256_sqrt_pd(r2);
+        __m256d r3 = _mm256_mul_pd(r, _mm256_mul_pd(r, r));
+
+        __m256d force = _mm256_div_pd(_mm256_mul_pd(g_const, mass), r3);
+        force = _mm256_min_pd(force, max_force);
+
+        __m256d mask = _mm256_cmp_pd(r2, epsilon, _CMP_GT_OQ);
+        force = _mm256_and_pd(force, mask);
+
+        acc_x = _mm256_add_pd(acc_x, _mm256_mul_pd(force, dx));
+        acc_y = _mm256_add_pd(acc_y, _mm256_mul_pd(force, dy));
+    }
+
+    // Sum up the vector components
+    double acc_x_sum = _mm256_reduce_add_pd(acc_x);
+    double acc_y_sum = _mm256_reduce_add_pd(acc_y);
+
+    // Set the final acceleration
+    object1.acceleration = {acc_x_sum, acc_y_sum};
+}
+
+
 
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
     const size_t numObjects = allObjects.size();
@@ -579,8 +627,8 @@ std::vector<Object> get_objects() {
     std::vector<Object> allObjects;
 
     // Create and add objects
-    for (int i=0; i < 25; i++) {
-        for (int j=0; j < 25; j++) {
+    for (int i=0; i < 50; i++) {
+        for (int j=0; j < 50; j++) {
             const float r = float(i)/(24.0f * 0.9f) + 0.10f;
             const float g = float(j)/(24.0f * 0.9f) + 0.10f;
             const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);

@@ -8,6 +8,12 @@ find_package(glfw3 REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
 
+# SIMD
+if(MSVC)
+    add_compile_options(/O2 /arch:AVX2)
+else()
+    add_compile_options(-O3 -march=native -mavx2 -mfma)
+endif()
 
 # ImGui setup
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui") # Adjust this path as needed
