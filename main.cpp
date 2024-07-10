@@ -549,6 +549,7 @@ void drawObject(const Object& obj) {
     // Draw trail
     if (g_enable_trail == 1) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
+            if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
             double alpha = static_cast<double>(i) / obj.trail.size();
             double trailRadius = obj.radius * TRAIL_SCALE * alpha;
             drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
@@ -556,6 +557,7 @@ void drawObject(const Object& obj) {
     };
 
     // Draw main object
+    if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
     drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
 }
 
