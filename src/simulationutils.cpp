@@ -1,8 +1,12 @@
 #include "../include/SimulationUtils.h"
-#include <immintrin.h>
 #include <iostream>
 #include "../include/settings.h"
+#include <cpuid.h>
+#ifdef USE_AVX2
+#include <immintrin.h>
+#endif
 
+#ifdef USE_AVX2
 // Helper function to sum up a __m256d vector
 double _mm256_reduce_add_pd(__m256d v) {
     __m128d vlow  = _mm256_castpd256_pd128(v);
@@ -64,6 +68,37 @@ void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects,
 
     // Set the final acceleration
     object1.acceleration = {acc_x_sum, acc_y_sum};
+}
+#endif
+// Non-AVX version of gravity calculation
+void calculate_gravity_normal(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+    Vector2 totalAcceleration = {0.0, 0.0};
+
+    for (size_t i = start; i < end; ++i) {
+        const Object& object2 = objects[i];
+        Vector2 delta = object2.position - object1.position;
+        double distanceSquared = delta.x * delta.x + delta.y * delta.y;
+
+        if (distanceSquared > Settings::EPSILON) {
+            double distance = std::sqrt(distanceSquared);
+            double forceMagnitude = Settings::g_G * object1.mass * object2.mass / (distanceSquared * distance);
+            forceMagnitude = std::min(forceMagnitude, Settings::g_MAX_FORCE);
+
+            Vector2 acceleration = delta * (forceMagnitude / object1.mass);
+            totalAcceleration = totalAcceleration + acceleration;
+        }
+    }
+
+    object1.acceleration = totalAcceleration;
+}
+
+// Function to choose between AVX and normal calculation
+void calculate_gravity(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+#ifdef USE_AVX2
+    calculate_gravity_simd(object1, objects, start, end);
+#else
+    calculate_gravity_normal(object1, objects, start, end);
+#endif
 }
 
 void updateObjectTrail(Object& obj) {
@@ -156,7 +191,7 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
         size_t end = std::min(i + batchSize, numObjects);
         gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
             for (size_t j = i; j < end; ++j) {
-                calculate_gravity_simd(allObjects[j], allObjects, 0, allObjects.size());
+                calculate_gravity(allObjects[j], allObjects, 0, allObjects.size());
             }
         }));
     }
