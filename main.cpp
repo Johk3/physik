@@ -113,7 +113,6 @@ int g_refreshRate = REFRESH_RATE;
 int g_enable_trail = convert_bool(ENABLE_TRAIL);
 int g_enable_threading = convert_bool(ENABLE_THREADING);
 int g_enable_lod = convert_bool(ENABLE_LOD);
-int g_simulate = 1;
 
 
 // CONTROL PANEL --
@@ -207,9 +206,6 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::InputInt("Enable LOD", &g_enable_lod, 1.0, 1.0);
     g_enable_lod = std::max(0, std::min(1, g_enable_lod));
 
-    ImGui::InputInt("Physics simulation ", &g_simulate, 1.0, 1.0);
-    g_simulate = std::max(0, std::min(1, g_simulate));
-
     ImGui::Text("Current Trail Spacing: %.3f", g_trailSpacing);
     ImGui::Text("Current Trail Length: %.0f", g_maxTrailLength);
     ImGui::Text("Current Bounce Factor: %.2f", g_bounceFactor);
@@ -220,12 +216,10 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     const std::string trail_text = std::string("Trail is: ") + ui_toggle_text(g_enable_trail);
     const std::string thread_text = std::string("Threading is: ") + ui_toggle_text(g_enable_threading);
     const std::string lod_text = std::string("LOD is: ") + ui_toggle_text(g_enable_lod);
-    const std::string sim_text = std::string("Simulation is: ") + ui_toggle_text(g_simulate);
 
     ImGui::Text(trail_text.c_str());
     ImGui::Text(thread_text.c_str());
     ImGui::Text(lod_text.c_str());
-    ImGui::Text(sim_text.c_str());
 
     ImGui::End();
 
@@ -420,23 +414,21 @@ void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects,
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
 
-        if (r2 < 1e-12) continue;  // Avoid division by zero
+        if (r2 < 1e-12) continue;
 
         double r = std::sqrt(r2);
-        // Avoid division by zero
         if (r < 1e-6f) continue;
 
         double force = 6.67430e-11 * object2.mass / (r2 * r);
-
         double MAX_FORCE = 10000.0f;
         force = std::min(force, MAX_FORCE);
 
         acc = acc + diff * force;
     }
+    object1.acceleration = acc;
 }
 
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
-
     const size_t numObjects = allObjects.size();
     const size_t numThreads = pool.getThreadCount();
     const size_t batchSize = std::max(size_t(1), numObjects / (numThreads * 4)); // Adjust this for optimal performance
@@ -549,7 +541,6 @@ void drawObject(const Object& obj) {
     // Draw trail
     if (g_enable_trail == 1) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
-            if (std::abs(obj.trail[i].x) > PREVENT_DRAW_DISTANCE or std::abs(obj.trail[i].y) > PREVENT_DRAW_DISTANCE) continue;
             double alpha = static_cast<double>(i) / obj.trail.size();
             double trailRadius = obj.radius * TRAIL_SCALE * alpha;
             drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
@@ -557,7 +548,6 @@ void drawObject(const Object& obj) {
     };
 
     // Draw main object
-    if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
     drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
 }
 
@@ -617,7 +607,7 @@ int main() {
 
     // Create control panel window
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow* controlWindow = glfwCreateWindow(400, 450, "Control Panel", nullptr, nullptr);
+    GLFWwindow* controlWindow = glfwCreateWindow(350, 450, "Control Panel", nullptr, nullptr);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);  // Reset for future windows
     if (!controlWindow) {
         glfwDestroyWindow(simulationWindow);
@@ -648,17 +638,14 @@ int main() {
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(simulationWindow) && !glfwWindowShouldClose(controlWindow)) {
         // Update Simulation
+        updateSimulation(allObjects, grid, pool, 1.0 / g_refreshRate);
 
-        if (g_simulate == 1) {
-            updateSimulation(allObjects, grid, pool, 1.0 / g_refreshRate);
-
-            // Update all objects with new trail values
-            for (auto& obj : allObjects) {
-                obj.TRAIL_SPACING = g_trailSpacing;
-                obj.MAX_TRAIL_LENGTH = g_maxTrailLength;
-                obj.radius = (std::cbrt((3 * obj.mass) / (4 * 3.141592 * obj.density)) / (1000 * g_scaleFactor));
-            }
-        };
+        // Update all objects with new trail values
+        for (auto& obj : allObjects) {
+            obj.TRAIL_SPACING = g_trailSpacing;
+            obj.MAX_TRAIL_LENGTH = g_maxTrailLength;
+            obj.radius = (std::cbrt((3 * obj.mass) / (4 * 3.141592 * obj.density)) / (1000 * g_scaleFactor));
+        }
 
         // Render simulation window
         glfwMakeContextCurrent(simulationWindow);
@@ -689,3 +676,15 @@ int main() {
     glfwTerminate();
     return 0;
 }
+/*
+ * arity: 3
+ * C(I(Z,Z), C(P1,P3,P2), Z)
+ *
+ * C(I(Z,Z), C(P1,P3,P2), Z)(x,y,z)
+ * I(Z,Z)(C(P1,P3,P2), Z)(x,y,z)
+ * I(Z,Z)(P1(P3,P2), Z)(x,y,z)
+ * I(Z,Z)(P1(P3,P2)(x,y,z), Z(x,y,z))
+ * BASE CASE: I(Z,Z)(0, Z(x,y,z)) = Z(Z(x,y,z)) = 0
+ * RECURSIVE CASE: I(Z,Z)(P1(P3,P2)(x,y,z), Z(x,y,z))
+ * = Z(I(Z,Z)(P1(P3,P2)(x,y,z), Z(x,y,z), P1(P3,P2)(x,y,z), Z(x,y,z)) = 0,
+*/
