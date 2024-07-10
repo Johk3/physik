@@ -28,13 +28,35 @@ set(IMGUI_SOURCES
         ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
+# Define header and source files
+set(HEADERS
+        include/object.h
+        include/vector2.h
+        include/spatialgrid.h
+        include/rendering.h
+        include/controlpanel.h
+        include/simulationutils.h
+        include/settings.h
+        include/ThreadPool.h
+        include/constants.h
+        include/linmath.h
+)
+
+set(SOURCES
+        main.cpp
+        src/object.cpp
+        src/rendering.cpp
+        src/simulationutils.cpp
+        src/controlpanel.cpp
+        src/spatialgrid.cpp
+        src/settings.cpp
+)
+
 # Add executable
 add_executable(physik
-        main.cpp
-        linmath.h
-        settings.h
-        ThreadPool.h
         ${IMGUI_SOURCES}
+        ${HEADERS}
+        ${SOURCES}
 )
 
 # Include directories

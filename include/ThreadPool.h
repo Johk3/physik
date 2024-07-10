@@ -4,6 +4,7 @@
 
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
+#include <functional>
 #include <future>
 #include <thread>
 #include <queue>
