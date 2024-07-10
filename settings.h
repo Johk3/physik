@@ -13,8 +13,9 @@
 
 // TRAIL SETTINGS
 #define ENABLE_TRAIL true       // Enable or disable trail
-#define SPACING 0.05f          // for trail spacing
+#define SPACING 0.05f           // for trail spacing
 #define TRAIL_LENGTH 10         // How many trail "dots" per object
+#define TRAIL_SCALE 0.75        // Trail size as a ratio to object
 
 // GRAPHICS SETTINGS
 #define CIRCLE_SEGMENTS 32      // Number of segments in circle rendering
@@ -24,5 +25,7 @@
 // PERFORMANCE SETTINGS
 #define ENABLE_THREADING true
 #define REFRESH_RATE 5000       // Hz. Improves physics accuracy but will slow time down
+#define ENABLE_LOD true         // Enable or disable LOD
+#define MIN_LOD 5               // Minimum number of circle segments
 
 #endif //SETTINGS_H

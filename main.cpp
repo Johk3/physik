@@ -112,6 +112,7 @@ int g_circleSegments = CIRCLE_SEGMENTS;
 int g_refreshRate = REFRESH_RATE;
 int g_enable_trail = convert_bool(ENABLE_TRAIL);
 int g_enable_threading = convert_bool(ENABLE_THREADING);
+int g_enable_lod = convert_bool(ENABLE_LOD);
 
 
 // CONTROL PANEL --
@@ -176,14 +177,14 @@ void renderControlPanel(GLFWwindow* controlWindow) {
 
     // Trail Length
     ImGui::InputDouble("Trail Length", &g_maxTrailLength, 1.0, 10.0);
-    g_maxTrailLength = std::max(10.0, std::min(1000.0, g_maxTrailLength));
+    g_maxTrailLength = std::max(5.0, std::min(1000.0, g_maxTrailLength));
 
     // Bounce Factor
-    ImGui::InputDouble("Bounce Factor", &g_bounceFactor, 0.01, 0.1, "%.2f");
+    ImGui::InputDouble("Bounce Factor", &g_bounceFactor, 0.1, 1.0, "%.2f");
     g_bounceFactor = std::max(0.0, std::min(1.0, g_bounceFactor));
 
     // Scale Factor
-    ImGui::InputDouble("Scale Factor", &g_scaleFactor, 0.1, 1.0, "%.2f");
+    ImGui::InputDouble("Scale Factor", &g_scaleFactor, 0.5, 1.0, "%.2f");
     g_scaleFactor = std::max(0.1, std::min(100.0, g_scaleFactor));
 
     // Circle Segments
@@ -202,6 +203,9 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::InputInt("Enable Threading", &g_enable_threading, 1.0, 1.0);
     g_enable_threading = std::max(0, std::min(1, g_enable_threading));
 
+    ImGui::InputInt("Enable LOD", &g_enable_lod, 1.0, 1.0);
+    g_enable_lod = std::max(0, std::min(1, g_enable_lod));
+
     ImGui::Text("Current Trail Spacing: %.3f", g_trailSpacing);
     ImGui::Text("Current Trail Length: %.0f", g_maxTrailLength);
     ImGui::Text("Current Bounce Factor: %.2f", g_bounceFactor);
@@ -211,9 +215,11 @@ void renderControlPanel(GLFWwindow* controlWindow) {
 
     const std::string trail_text = std::string("Trail is: ") + ui_toggle_text(g_enable_trail);
     const std::string thread_text = std::string("Threading is: ") + ui_toggle_text(g_enable_threading);
+    const std::string lod_text = std::string("LOD is: ") + ui_toggle_text(g_enable_lod);
 
     ImGui::Text(trail_text.c_str());
     ImGui::Text(thread_text.c_str());
+    ImGui::Text(lod_text.c_str());
 
     ImGui::End();
 
@@ -502,11 +508,19 @@ void drawSquare(const double x, const double y, const double r, const double g, 
 }
 
 void drawCircle(const double x, const double y, const double radius, const double r, const double g, const double b, const double alpha) {
+
+    int circle_segments = g_circleSegments;
+
+    // LOD optimization
+    if (g_enable_lod == 1) {
+        circle_segments = std::min(int(round(150 * radius + 5)), g_circleSegments);
+    };
+
     glColor4d(r, g, b, alpha);
     glBegin(GL_TRIANGLE_FAN);
     glVertex2d(x, y);
-    for (int i = 0; i <= g_circleSegments; i++) {
-        const double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(g_circleSegments);
+    for (int i = 0; i <= circle_segments; i++) {
+        const double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(circle_segments);
         const double dx = radius * std::cos(theta);
         const double dy = radius * std::sin(theta);
         glVertex2d(x + dx, y + dy);
@@ -522,7 +536,7 @@ void drawObject(const Object& obj) {
     if (g_enable_trail == 1) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
             double alpha = static_cast<double>(i) / obj.trail.size();
-            double trailRadius = obj.radius * 0.5 * alpha;
+            double trailRadius = obj.radius * TRAIL_SCALE * alpha;
             drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
         }
     };
@@ -565,6 +579,8 @@ std::vector<Object> get_objects() {
         }
     }
     allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0);
+    std::cout << allObjects[625].radius;
+    std::cout << allObjects[622].radius;
 
     return allObjects;
 
@@ -585,7 +601,7 @@ int main() {
 
     // Create control panel window
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow* controlWindow = glfwCreateWindow(350, 400, "Control Panel", nullptr, nullptr);
+    GLFWwindow* controlWindow = glfwCreateWindow(350, 450, "Control Panel", nullptr, nullptr);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);  // Reset for future windows
     if (!controlWindow) {
         glfwDestroyWindow(simulationWindow);
