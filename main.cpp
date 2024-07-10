@@ -397,12 +397,15 @@ void handleCollision(Object& obj1, Object& obj2) {
 std::mutex cout_mutex;
 std::atomic<bool> simulation_running(true);
 
-// Simplified parallel gravity calculation
-void calculate_gravity(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+// New helper function for SIMD-optimized gravity calculation
+// SingleInstructionMultipleData
+void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+    // SIMD implementation of gravity calculation
+    // This is a placeholder and should be replaced with actual SIMD code
+    // TODO: I will add the SIMD Stuff here in the near future.
+    // SIMD
 
-    // Reset acceleration
-    object1.acceleration = {0.0, 0.0};
-
+    Vector2 acc = {0.0, 0.0};
     for (size_t i = start; i < end; ++i) {
         const auto& object2 = objects[i];
         if (&object1 == &object2) continue;
@@ -411,82 +414,85 @@ void calculate_gravity(Object& object1, const std::vector<Object>& objects, size
         Vector2 diff = object2.position - object1.position;
         double r2 = diff.x * diff.x + diff.y * diff.y;
 
-        if (r2 < 1e-12) continue;  // Avoid division by zero
+        if (r2 < 1e-12) continue;
 
         double r = std::sqrt(r2);
-
-        // Avoid division by zero
         if (r < 1e-6f) continue;
 
         double force = 6.67430e-11 * object2.mass / (r2 * r);
-
         double MAX_FORCE = 10000.0f;
         force = std::min(force, MAX_FORCE);
 
-        object1.acceleration = object1.acceleration + diff * force;
+        acc = acc + diff * force;
     }
+    object1.acceleration = acc;
 }
 
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
-
     const size_t numObjects = allObjects.size();
+    const size_t numThreads = pool.getThreadCount();
+    const size_t batchSize = std::max(size_t(1), numObjects / (numThreads * 4)); // Adjust this for optimal performance
 
-    if (g_enable_threading == 1) {
-        // Determine the number of threads available on the system
-        const size_t numThreads = std::thread::hardware_concurrency();
-        // Calculate the number of objects each thread will process
-        // Ensure at least 1 object per chunk to avoid division by zero
-        const size_t chunkSize = std::max(size_t(1), numObjects / numThreads);
+    // Step 1: Gravity Calculation
+    std::vector<std::future<void>> gravityfutures;
+    for (size_t i = 0; i < numObjects; i += batchSize) {
+        size_t end = std::min(i + batchSize, numObjects);
+        gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
+            for (size_t j = i; j < end; ++j) {
+                calculate_gravity_simd(allObjects[j], allObjects, 0, allObjects.size());
+            }
+        }));
+    }
 
-        std::vector<std::future<void>> futures;
+    // Wait for gravity calculations to complete
+    for (auto& future : gravityfutures) {
+        future.get();
+    }
 
-        // Divide the objects into chunks and process each chunk in parallel
-        for (size_t i = 0; i < numObjects; i += chunkSize) {
-            // Calculate the end index for this chunk, ensuring we don't go past the array bounds
-            size_t end = std::min(i + chunkSize, numObjects);
-            // Enqueue a task to process this chunk of objects
-            futures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
-                // Process each object in this chunk
-                for (size_t j = i; j < end; ++j) {
-                    Object& obj = allObjects[j];
-                    calculate_gravity(obj, allObjects, 0, allObjects.size());
-                    obj.velocity = obj.velocity + obj.acceleration * delta_time;
-                    obj.position = obj.position + obj.velocity * delta_time;
-                    updateObjectTrail(obj);
-                }
-            }));
-        };
+    // Step 2: Update positions and trails
+    std::vector<std::future<void>> updateFutures;
+    for (size_t i = 0; i < numObjects; i += batchSize) {
+        size_t end = std::min(i + batchSize, numObjects);
+        updateFutures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
+            for (size_t j = i; j < end; ++j) {
+                Object& obj = allObjects[j];
+                obj.velocity = obj.velocity + obj.acceleration * delta_time;
+                obj.position = obj.position + obj.velocity * delta_time;
+                updateObjectTrail(obj);
+            }
+        }));
+    }
 
-        for (auto& future : futures) {
-            future.get();
-        }
+    // Wait for position updates to complete
+    for (auto& future : updateFutures) {
+        future.get();
+    }
 
-    } else {
-
-        for (size_t j = 0; j < numObjects; ++j) {
-            Object& obj = allObjects[j];
-            calculate_gravity(obj, allObjects, 0, numObjects);
-            obj.velocity = obj.velocity + obj.acceleration * delta_time;
-            obj.position = obj.position + obj.velocity * delta_time;
-            updateObjectTrail(obj);
-        }
-
-    };
-
-    // Clear and rebuild the spatial grid
+    // Step 3: Rebuild spatial grid (this step is not easily parallelizable due to potential race conditions)
     grid.clear();
     for (auto& obj : allObjects) {
         grid.insert(&obj);
     }
 
-    // Handle collisions
-    for (size_t i = 0; i < allObjects.size(); i++) {
-        auto neighbors = grid.getNeighbors(allObjects[i]);
-        for (auto* neighbor : neighbors) {
-            if (checkCollision(allObjects[i], *neighbor)) {
-                handleCollision(allObjects[i], *neighbor);
+    // Step 4: Handle collisions
+    std::vector<std::future<void>> collisionFutures;
+    for (size_t i = 0; i < numObjects; i += batchSize) {
+        size_t end = std::min(i + batchSize, numObjects);
+        collisionFutures.push_back(pool.enqueue([&allObjects, &grid, i, end]() {
+            for (size_t j = i; j < end; ++j) {
+                auto neighbors = grid.getNeighbors(allObjects[j]);
+                for (auto* neighbor : neighbors) {
+                    if (checkCollision(allObjects[j], *neighbor)) {
+                        handleCollision(allObjects[j], *neighbor);
+                    }
+                }
             }
-        }
+        }));
+    }
+
+    // Wait for collision handling to complete
+    for (auto& future : collisionFutures) {
+        future.get();
     }
 }
 
