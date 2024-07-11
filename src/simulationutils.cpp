@@ -72,25 +72,29 @@ void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects,
 #endif
 // Non-AVX version of gravity calculation
 void calculate_gravity_normal(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-    Vector2 totalAcceleration = {0.0, 0.0};
-
+    Vector2 acc = {0.0, 0.0};
     for (size_t i = start; i < end; ++i) {
-        const Object& object2 = objects[i];
-        Vector2 delta = object2.position - object1.position;
-        double distanceSquared = delta.x * delta.x + delta.y * delta.y;
+        const auto& object2 = objects[i];
+        if (&object1 == &object2) continue;
+        if (object2.mass < Settings::EPSILON) continue;
 
-        if (distanceSquared > Settings::EPSILON) {
-            double distance = std::sqrt(distanceSquared);
-            double forceMagnitude = Settings::g_G * object1.mass * object2.mass / (distanceSquared * distance);
-            forceMagnitude = std::min(forceMagnitude, Settings::g_MAX_FORCE);
+        Vector2 diff = object2.position - object1.position;
+        double r2 = diff.x * diff.x + diff.y * diff.y;
 
-            Vector2 acceleration = delta * (forceMagnitude / object1.mass);
-            totalAcceleration = totalAcceleration + acceleration;
-        }
+        if (r2 < 1e-12) continue;
+
+        double r = std::sqrt(r2);
+        if (r < 1e-6f) continue;
+
+        double force = 6.67430e-11 * object2.mass / (r2 * r);
+        double MAX_FORCE = 10000.0f;
+        force = std::min(force, MAX_FORCE);
+
+        acc = acc + diff * force;
     }
-
-    object1.acceleration = totalAcceleration;
+    object1.acceleration = acc;
 }
+
 
 // Function to choose between AVX and normal calculation
 void calculate_gravity(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
