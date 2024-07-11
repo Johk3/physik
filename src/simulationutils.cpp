@@ -259,8 +259,8 @@ std::vector<Object> get_objects() {
     std::vector<Object> allObjects;
 
     // Create and add objects
-    for (int i=0; i < 50; i++) {
-        for (int j=0; j < 50; j++) {
+    for (int i=0; i < 25; i++) {
+        for (int j=0; j < 25; j++) {
             const float r = float(i)/(24.0f * 0.9f) + 0.10f;
             const float g = float(j)/(24.0f * 0.9f) + 0.10f;
             const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
@@ -269,8 +269,6 @@ std::vector<Object> get_objects() {
         }
     }
     allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0);
-    std::cout << allObjects[625].radius;
-    std::cout << allObjects[622].radius;
 
     return allObjects;
 
