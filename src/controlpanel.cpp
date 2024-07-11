@@ -72,7 +72,7 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::InputInt("Circle Segments", &Settings::g_circleSegments);
 
     // Refresh Rate
-    ImGui::InputInt("Refresh Rate", &Settings::g_refreshRate);
+    ImGui::InputInt("Refresh Rate", &Settings::g_refreshRate, 100, 1000);
 
     // Enable Trail
     ImGui::Checkbox("Enable Trail", &Settings::g_enableTrail);

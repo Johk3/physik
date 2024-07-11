@@ -37,7 +37,7 @@ namespace Settings {
         g_circleSegments = std::clamp(g_circleSegments, 3, 100);
         g_trailSpacing = std::clamp(g_trailSpacing, 0.001, 0.1);
         g_maxTrailLength = std::clamp(g_maxTrailLength, 5.0, 1000.0);
-        g_bounceFactor = std::clamp(g_bounceFactor, 0.0, 1.0);
+        g_bounceFactor = std::clamp(g_bounceFactor, 0.0, 10.0);
         g_scaleFactor = std::clamp(g_scaleFactor, 0.1, 100.0);
         g_G = std::clamp(g_G, 1e-20, 1e10);
         g_MAX_FORCE = std::clamp(g_MAX_FORCE, 0.01, 1e10);

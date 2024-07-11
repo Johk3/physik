@@ -1,20 +1,24 @@
 cmake_minimum_required(VERSION 3.28)
-project(physik)
+project(physik CXX)
 
 set(CMAKE_CXX_STANDARD 17)
+
 
 # Find required packages
 find_package(glfw3 REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
 
+
 # Check AVX Support
 include(CheckCXXSourceRuns)
 include(CheckCXXCompilerFlag)
+if(COMPILER_SUPPORTS_AVX2)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
 elseif(MSVC)
     check_cxx_compiler_flag("/arch:AVX2" COMPILER_SUPPORTS_AVX2)
+endif()
 endif()
 if(MSVC AND COMPILER_SUPPORTS_AVX2)
     add_compile_options(/O2 /arch:AVX2)
