@@ -1,4 +1,4 @@
-#include "../include/SimulationUtils.h"
+#include "../include/simulationutils.h"
 #include <iostream>
 #include "../include/settings.h"
 #include <cpuid.h>

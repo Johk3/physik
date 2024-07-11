@@ -6,12 +6,12 @@
 #include <thread>
 #include <cmath>
 
-#include "include/Settings.h"
-#include "include/Object.h"
-#include "include/SpatialGrid.h"
-#include "include/Rendering.h"
-#include "include/SimulationUtils.h"
-#include "include/ControlPanel.h"
+#include "include/settings.h"
+#include "include/object.h"
+#include "include/spatialgrid.h"
+#include "include/rendering.h"
+#include "include/simulationutils.h"
+#include "include/controlpanel.h"
 #include "include/ThreadPool.h"
 
 int main() {

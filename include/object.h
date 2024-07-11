@@ -1,7 +1,7 @@
 #ifndef OBJECT_H
 #define OBJECT_H
 
-#include "Vector2.h"
+#include "vector2.h"
 #include <vector>
 
 // Represents a physical object in the simulation

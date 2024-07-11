@@ -1,7 +1,7 @@
 #ifndef SPATIALGRID_H
 #define SPATIALGRID_H
 
-#include "Object.h"
+#include "object.h"
 #include <vector>
 #include <unordered_set>
 

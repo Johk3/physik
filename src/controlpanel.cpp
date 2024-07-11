@@ -1,6 +1,6 @@
 // src/ControlPanel.cpp
-#include "../include/ControlPanel.h"
-#include "../include/Settings.h"
+#include "../include/controlpanel.h"
+#include "../include/settings.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
