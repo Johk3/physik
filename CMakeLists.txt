@@ -10,20 +10,34 @@ find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
 
 
-# Check AVX Support
+# Check AVX2 Support
+include(CheckCXXSourceRuns)
+set(AVX2_CODE "
+    #include <immintrin.h>
+    int main() {
+        __m256i a = _mm256_set1_epi32(1);
+        __m256i b = _mm256_set1_epi32(2);
+        __m256i c = _mm256_add_epi32(a, b);
+        return _mm256_extract_epi32(c, 0) == 3 ? 0 : 1;
+    }
+")
 include(CheckCXXSourceRuns)
 include(CheckCXXCompilerFlag)
-if(COMPILER_SUPPORTS_AVX2)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+    set(CMAKE_REQUIRED_FLAGS "-mavx2")
 elseif(MSVC)
-    check_cxx_compiler_flag("/arch:AVX2" COMPILER_SUPPORTS_AVX2)
+    set(CMAKE_REQUIRED_FLAGS "/arch:AVX2")
 endif()
-endif()
+
+check_cxx_source_runs("${AVX2_CODE}" COMPILER_SUPPORTS_AVX2)
+
 if(MSVC AND COMPILER_SUPPORTS_AVX2)
+    message(STATUS "AVX support detected, enabling AVX MSVC")
     add_compile_options(/O2 /arch:AVX2)
 endif ()
 if(NOT MSVC AND COMPILER_SUPPORTS_AVX2)
+    message(STATUS "AVX support detected, enabling AVX MINGW")
+
     add_compile_options(-O3 -march=native -mavx2 -mfma)
 endif()
 
