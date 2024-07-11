@@ -128,7 +128,7 @@ target_link_libraries(physik
 )
 
 # Set compiler flags and definitions based on CPU support
-if(NOT CPU_HAS_AVX2)
+if(CPU_HAS_AVX2)
     if(MSVC)
         target_compile_options(physik PRIVATE /O2 /arch:AVX2)
     else()
