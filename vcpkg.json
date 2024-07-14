@@ -32,5 +32,8 @@
   }, {
     "name" : "imgui",
     "version>=" : "1.90.7"
+  }, {
+    "name" : "opencl",
+    "version>=" : "v2023.02.06#2"
   } ]
 }

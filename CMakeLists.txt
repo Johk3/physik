@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(glfw3 REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
+find_package(OpenCL REQUIRED)
+find_package(OpenGL REQUIRED)
+
 
 # Function to check for CPU features on macOS
 function(check_cpu_feature feature result_var)
@@ -27,6 +30,7 @@ endfunction()
 include(CheckCXXSourceRuns)
 
 if(APPLE)
+    target_compile_definitions(physik PRIVATE __APPLE__)
     check_cpu_feature("AVX1.0" CPU_HAS_AVX)
     check_cpu_feature("AVX2" CPU_HAS_AVX2)
     message(STATUS "User is using an APPLE device")
@@ -125,6 +129,8 @@ target_link_libraries(physik
         glfw
         GLEW::GLEW
         glad::glad
+        OpenCL::OpenCL
+        OpenGL::GL
 )
 
 # Set compiler flags and definitions based on CPU support
