@@ -27,6 +27,7 @@ This project requires the following libraries:
 - GLFW3 (Graphics Library Framework)
 - imgui (included in the project)
 - linmath.h (included in the project)
+- GLM (OpenGL Mathematics)
 
 ## Building the Project
 
@@ -37,4 +38,5 @@ Ensure you have the following installed on your system:
 1. A C++ compiler (e.g., GCC, Clang)
 2. GLEW library
 3. GLFW3 library
-4. CMake (optional, for easier build management)
+4. GLM library
+5. CMake (optional, for easier build management)
