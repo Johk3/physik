@@ -60,6 +60,7 @@ int main() {
 
     SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
     ThreadPool pool(std::thread::hardware_concurrency());
+    initializeOpenCL();
 
     // Main loop
     while (!glfwWindowShouldClose(simulationWindow) && !glfwWindowShouldClose(controlWindow)) {
