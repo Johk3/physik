@@ -183,9 +183,6 @@ int main() {
 
         // Poll for and process events
         glfwPollEvents();
-
-        // Set the refresh rate
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000/Settings::g_refreshRate));
     }
 
     // Cleanup

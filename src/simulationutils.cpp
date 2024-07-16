@@ -429,14 +429,14 @@ std::vector<Object> get_objects() {
     std::vector<Object> allObjects;
 
     // Create and add objects in 3D space
-    for (int i = 0; i < 10; i++) {
-        for (int j = 0; j < 10; j++) {
-            for (int k = 0; k < 10; k++) {
+    for (int i = 0; i < 5; i++) {
+        for (int j = 0; j < 5; j++) {
+            for (int k = 0; k < 5; k++) {
                 const float r = float(i) / 9.0f;
                 const float g = float(j) / 9.0f;
                 const float b = float(k) / 9.0f;
 
-                allObjects.emplace_back(Vector3{-0.5f + i * 0.1f, -0.5f + j * 0.1f, -0.5f + k * 0.1f}, Vector3{0.0f, 0.0f, 0.0f}, 1e5, 0.1, r, g, b);
+                allObjects.emplace_back(Vector3{-0.5f + i * 0.1f, -0.5f + j * 0.1f, -0.5f + k * 0.1f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, r, g, b);
             }
         }
     }
