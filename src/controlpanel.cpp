@@ -68,6 +68,9 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     // Scale Factor
     ImGui::InputDouble("Scale Factor", &Settings::g_scaleFactor, 0.5, 1.0, "%.2f");
 
+    // Arrow size
+    ImGui::InputDouble("Arrow proportionality", &Settings::g_arrowProportionality, 0.5, 1.5, "%.2f");
+
     // Circle Segments
     ImGui::InputInt("Circle Segments", &Settings::g_circleSegments);
 
@@ -93,6 +96,7 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     ImGui::Text("Current Trail Length: %.0f", Settings::g_maxTrailLength);
     ImGui::Text("Current Bounce Factor: %.2f", Settings::g_bounceFactor);
     ImGui::Text("Current Scale Factor: %.2f", Settings::g_scaleFactor);
+    ImGui::Text("Current Arrow Proportionality: %.2f", Settings::g_arrowProportionality);
     ImGui::Text("Current Circle Segments: %d", Settings::g_circleSegments);
     ImGui::Text("Current Refresh Rate: %d", Settings::g_refreshRate);
 

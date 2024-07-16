@@ -13,6 +13,7 @@ constexpr double TRAIL_SCALE = 0.75;
 constexpr double PREVENT_DRAW_DISTANCE = 1.0;
 constexpr double GRAVITY = 6.67430e-11;
 constexpr double MAX_FORCE_INIT = 1e6;
+constexpr double ARROW_PROPORTIONALITY = 1.5;
 constexpr int REFRESH_RATE = 5000;
 constexpr bool ENABLE_TRAIL = false;
 constexpr bool DRAW_ARROW = true;

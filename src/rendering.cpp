@@ -187,9 +187,9 @@ void drawObject(const Object& obj) {
                                              obj.acceleration.z * obj.acceleration.z);
 
         // Adjust these scale factors as needed
-        float maxArrowLength = obj.radius*1.5f; // Maximum arrow length in simulation units
+        float maxArrowLength = obj.radius*Settings::g_arrowProportionality; // Maximum arrow length in simulation units
         float minArrowLength = obj.radius; // Minimum arrow length relative to object size
-        float arrowLength = std::min((float)obj.radius*1.5f*(1-1/accelerationLength), maxArrowLength);
+        float arrowLength = std::min((float)obj.radius*(float)Settings::g_arrowProportionality*(1-1/accelerationLength), maxArrowLength);
         arrowLength = std::max(arrowLength, minArrowLength);
 
         // Use a color that contrasts with both light and dark objects

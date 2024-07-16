@@ -11,6 +11,7 @@ namespace Settings {
     double g_scaleFactor;
     double g_G;
     double g_MAX_FORCE;
+    double g_arrowProportionality;
     int g_refreshRate;
     bool g_enableTrail;
     bool g_drawArrow;
@@ -44,5 +45,6 @@ namespace Settings {
         g_G = std::clamp(g_G, 1e-20, 1e10);
         g_MAX_FORCE = std::clamp(g_MAX_FORCE, 0.01, 1e10);
         g_refreshRate = std::clamp(g_refreshRate, 1, 100000);
+        g_arrowProportionality = std::clamp(g_arrowProportionality, 1.0, 25.0);
     }
 }

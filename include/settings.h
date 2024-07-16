@@ -9,6 +9,7 @@ namespace Settings {;
     extern double g_scaleFactor;
     extern double g_G;
     extern double g_MAX_FORCE;
+    extern double g_arrowProportionality;
     extern const double EPSILON;
     extern int g_circleSegments;
     extern int g_refreshRate;
