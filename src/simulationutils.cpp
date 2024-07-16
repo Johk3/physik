@@ -342,25 +342,25 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
     const size_t numObjects = allObjects.size();
     const size_t numThreads = pool.getThreadCount();
     const size_t batchSize = std::max(size_t(1), numObjects / (numThreads * 4));
+
     // Step 1: Gravity Calculation
     #ifdef USE_GPU
-        calculate_gravity_gpu(allObjects);  // This now handles all objects at once
+        calculate_gravity_gpu(allObjects);
     #else
         std::vector<std::future<void>> gravityfutures;
         for (size_t i = 0; i < numObjects; i += batchSize) {
             size_t end = std::min(i + batchSize, numObjects);
             gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
                 for (size_t j = i; j < end; ++j) {
-#ifdef USE_AVX2
-                    calculate_gravity_simd(allObjects[j], allObjects, 0, allObjects.size());
-#else
-                    calculate_gravity_normal(allObjects[j], allObjects, 0, allObjects.size());
-#endif
+                    #ifdef USE_AVX2
+                        calculate_gravity_simd(allObjects[j], allObjects, 0, allObjects.size());
+                    #else
+                        calculate_gravity_normal(allObjects[j], allObjects, 0, allObjects.size());
+                    #endif
                 }
             }));
         }
 
-        // Wait for gravity calculations to complete
         for (auto& future : gravityfutures) {
             future.get();
         }
@@ -380,12 +380,11 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
         }));
     }
 
-    // Wait for position updates to complete
     for (auto& future : updateFutures) {
         future.get();
     }
 
-    // Step 3: Rebuild spatial grid (this step is not easily parallelizable due to potential race conditions)
+    // Step 3: Rebuild spatial grid
     grid.clear();
     for (auto& obj : allObjects) {
         grid.insert(&obj);
@@ -399,7 +398,7 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
             for (size_t j = i; j < end; ++j) {
                 auto neighbors = grid.getNeighbors(allObjects[j]);
                 for (auto* neighbor : neighbors) {
-                    if (checkCollision(allObjects[j], *neighbor)) {
+                    if (&allObjects[j] != neighbor && checkCollision(allObjects[j], *neighbor)) {
                         handleCollision(allObjects[j], *neighbor);
                     }
                 }
@@ -407,7 +406,6 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
         }));
     }
 
-    // Wait for collision handling to complete
     for (auto& future : collisionFutures) {
         future.get();
     }

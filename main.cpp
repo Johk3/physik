@@ -139,7 +139,7 @@ int main() {
     // Initialize objects
     std::vector<Object> allObjects = get_objects();
 
-    SpatialGrid grid(2.0, 2.0, 0.1);  // Assuming world size is 2x2 (-1 to 1 in both dimensions)
+    SpatialGrid grid(1.0f);
     ThreadPool pool(std::thread::hardware_concurrency());
 
     // Set up mouse callback
