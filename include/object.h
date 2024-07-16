@@ -7,18 +7,18 @@
 // Represents a physical object in the simulation
 class Object {
 public:
-    Object(const Vector2 pos, const Vector2 vel, const double m, const double d, const double red, const double green, const double blue);
+    Object(const Vector3 pos, const Vector3 vel, const double m, const double d, const double red, const double green, const double blue);
 
-    Vector2 position;
-    Vector2 velocity;
-    Vector2 acceleration;
+    Vector3 position;
+    Vector3 velocity;
+    Vector3 acceleration;
 
     double mass;
     double density;
     double r, g, b;
     double radius;
 
-    std::vector<Vector2> trail;
+    std::vector<Vector3> trail;
     float TRAIL_SPACING;
     size_t MAX_TRAIL_LENGTH;
 };

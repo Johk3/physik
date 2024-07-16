@@ -41,4 +41,34 @@ struct Vector2 {
     }
 };
 
+struct Vector3 {
+    double x, y, z;
+
+    Vector3 operator+(const Vector3& other) const {
+        return {x + other.x, y + other.y, z + other.z};
+    }
+
+    Vector3 operator-(const Vector3& other) const {
+        return {x - other.x, y - other.y, z - other.z};
+    }
+
+    Vector3 operator*(double scalar) const {
+        return {x * scalar, y * scalar, z * scalar};
+    }
+
+    [[nodiscard]] double length() const {
+        return std::sqrt(x*x + y*y + z*z);
+    }
+
+    [[nodiscard]] Vector3 normal() const {
+        double len = length();
+        return {x / len, y / len, z / len};
+    }
+
+    [[nodiscard]] double dot(const Vector3& other) const {
+        return x * other.x + y * other.y + z * other.z;
+    }
+};
+
+
 #endif // VECTOR2_H

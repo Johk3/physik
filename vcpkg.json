@@ -35,5 +35,8 @@
   }, {
     "name" : "opencl",
     "version>=" : "v2023.02.06#2"
+  }, {
+    "name" : "glm",
+    "version>=" : "1.0.1#3"
   } ]
 }

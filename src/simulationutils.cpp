@@ -71,24 +71,24 @@ void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects,
 }
 #endif
 // Non-AVX version of gravity calculation
+
 void calculate_gravity_normal(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-    Vector2 acc = {0.0, 0.0};
+    Vector3 acc = {0.0, 0.0, 0.0};
     for (size_t i = start; i < end; ++i) {
         const auto& object2 = objects[i];
         if (&object1 == &object2) continue;
         if (object2.mass < Settings::EPSILON) continue;
 
-        Vector2 diff = object2.position - object1.position;
-        double r2 = diff.x * diff.x + diff.y * diff.y;
+        Vector3 diff = object2.position - object1.position;
+        double r2 = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
 
         if (r2 < 1e-12) continue;
 
         double r = std::sqrt(r2);
         if (r < 1e-6f) continue;
 
-        double force = 6.67430e-11 * object2.mass / (r2 * r);
-        double MAX_FORCE = 10000.0f;
-        force = std::min(force, MAX_FORCE);
+        double force = Settings::g_G * object2.mass / (r2 * r);
+        force = std::min(force, Settings::g_MAX_FORCE);
 
         acc = acc + diff * force;
     }
@@ -111,8 +111,8 @@ void updateObjectTrail(Object& obj) {
         return;
     }
 
-    const Vector2 lastPosition = obj.trail.back();
-    const Vector2 diff = obj.position - lastPosition;
+    const Vector3 lastPosition = obj.trail.back();
+    const Vector3 diff = obj.position - lastPosition;
     double distance = diff.length();
 
     if (distance >= obj.TRAIL_SPACING) {
@@ -121,9 +121,10 @@ void updateObjectTrail(Object& obj) {
 
         for (int i = 0; i < numNewDots; ++i) {
             const double t = (i + 1) * obj.TRAIL_SPACING / distance;
-            Vector2 newDotPosition = {
+            Vector3 newDotPosition = {
                 lastPosition.x + diff.x * t,
-                lastPosition.y + diff.y * t
+                lastPosition.y + diff.y * t,
+                lastPosition.z + diff.z * t
             };
             obj.trail.push_back(newDotPosition);
 
@@ -143,14 +144,14 @@ bool checkCollision(const Object& obj1, const Object& obj2) {
 
 void handleCollision(Object& obj1, Object& obj2) {
     // Calculate vector from obj1 to obj2
-    const Vector2 delta = obj2.position - obj1.position;
+    const Vector3 delta = obj2.position - obj1.position;
     const float distance = delta.length();
 
     // Normalize the delta vector
-    const Vector2 normal = delta.normal();
+    const Vector3 normal = delta.normal();
 
     // Calculate relative velocity
-    const Vector2 relativeVelocity = obj2.velocity - obj1.velocity;
+    const Vector3 relativeVelocity = obj2.velocity - obj1.velocity;
 
     // Calculate relative velocity along the normal using dot product
     float velocityAlongNormal = relativeVelocity.dot(normal);
@@ -164,23 +165,30 @@ void handleCollision(Object& obj1, Object& obj2) {
     impulseScalar /= 1 / obj1.mass  +  1 / obj2.mass;
 
     // Apply impulse
-    Vector2 impulse = normal * impulseScalar;
+    Vector3 impulse = normal * impulseScalar;
 
     // Update velocities
     obj1.velocity.x -= impulse.x / obj1.mass;
     obj1.velocity.y -= impulse.y / obj1.mass;
+    obj1.velocity.z -= impulse.z / obj1.mass;
+
     obj2.velocity.x += impulse.x / obj2.mass;
     obj2.velocity.y += impulse.y / obj2.mass;
+    obj2.velocity.z += impulse.z / obj2.mass;
+
 
     // Separate the objects to prevent overlapping
     const float overlap = (obj1.radius + obj2.radius) - distance;
     if (overlap > 0) {
-        Vector2 separationVector = normal * overlap;
+        Vector3 separationVector = normal * overlap;
 
         obj1.position.x -= separationVector.x * obj2.mass/(obj1.mass + obj2.mass);
         obj1.position.y -= separationVector.y * obj2.mass/(obj1.mass + obj2.mass);
+        obj1.position.z -= separationVector.z * obj2.mass/(obj1.mass + obj2.mass);
+
         obj2.position.x += separationVector.x * obj1.mass/(obj1.mass + obj2.mass);
         obj2.position.y += separationVector.y * obj1.mass/(obj1.mass + obj2.mass);
+        obj2.position.z += separationVector.z * obj1.mass/(obj1.mass + obj2.mass);
     }
 }
 
@@ -255,21 +263,21 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
 
 
 std::vector<Object> get_objects() {
-
     std::vector<Object> allObjects;
 
-    // Create and add objects
-    for (int i=0; i < 25; i++) {
-        for (int j=0; j < 25; j++) {
-            const float r = float(i)/(24.0f * 0.9f) + 0.10f;
-            const float g = float(j)/(24.0f * 0.9f) + 0.10f;
-            const float b = 1.0f - (float(i+j)/(48.0f * 0.9f) + 0.10f);
+    // Create and add objects in 3D space
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
+            for (int k = 0; k < 10; k++) {
+                const float r = float(i) / 9.0f;
+                const float g = float(j) / 9.0f;
+                const float b = float(k) / 9.0f;
 
-            allObjects.emplace_back(Vector2{-0.5 + i * 0.04f, j * 0.04f}, Vector2{0.0f, 0.0f}, 1e5, 0.1, r, g, b);
+                allObjects.emplace_back(Vector3{-0.5f + i * 0.1f, -0.5f + j * 0.1f, -0.5f + k * 0.1f}, Vector3{0.0f, 0.0f, 0.0f}, 1e5, 0.1, r, g, b);
+            }
         }
     }
-    allObjects.emplace_back(Vector2{0.02, -0.5f}, Vector2{0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0);
+    allObjects.emplace_back(Vector3{0.02, -0.5f, 0.0f}, Vector3{0.0f, 0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0);
 
     return allObjects;
-
 }

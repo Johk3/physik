@@ -9,6 +9,8 @@ find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
 find_package(OpenCL REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(glm REQUIRED)
+
 
 
 # Function to check for CPU features on macOS
@@ -131,6 +133,7 @@ target_link_libraries(physik
         glad::glad
         OpenCL::OpenCL
         OpenGL::GL
+        glm::glm
 )
 
 # Set compiler flags and definitions based on CPU support
@@ -140,7 +143,7 @@ if(CPU_HAS_AVX2)
     else()
         target_compile_options(physik PRIVATE -O3 -march=native -mavx2 -mfma)
     endif()
-    target_compile_definitions(physik PRIVATE USE_AVX2)
+    # target_compile_definitions(physik PRIVATE USE_AVX2)
     message(STATUS "AVX2 support detected and enabled")
 elseif(CPU_HAS_AVX)
     if(MSVC)
