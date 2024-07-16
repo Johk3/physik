@@ -1,5 +1,5 @@
 # Small scale physics engine
-This project demonstrates a simple OpenGL application using GLFW3 and GLEW. It currently only displays N-body 2D physics.
+This project demonstrates a simple OpenGL application using GLFW3 and GLEW. This version displays N-body 3D physics.
 <table>
   <tr>
     <td>
