@@ -15,59 +15,82 @@ double _mm256_reduce_add_pd(__m256d v) {
     __m128d high64 = _mm_unpackhi_pd(vlow, vlow);
     return _mm_cvtsd_f64(_mm_add_sd(vlow, high64));
 }
-// SingleInstructionMultipleData Gravity using AVX architecture
+
+// SingleInstructionMultipleData Gravity calculation using AVX architecture
 void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+    // Load object1's position into AVX registers
     const __m256d obj1_x = _mm256_set1_pd(object1.position.x);
     const __m256d obj1_y = _mm256_set1_pd(object1.position.y);
+    const __m256d obj1_z = _mm256_set1_pd(object1.position.z);  // New Z component
+
+    // Load constants into AVX registers
     const __m256d epsilon = _mm256_set1_pd(Settings::EPSILON);
     const __m256d max_force = _mm256_set1_pd(Settings::g_MAX_FORCE);
     const __m256d g_const = _mm256_set1_pd(Settings::g_G);
 
+    // Initialize acceleration accumulators
     __m256d acc_x = _mm256_setzero_pd();
     __m256d acc_y = _mm256_setzero_pd();
+    __m256d acc_z = _mm256_setzero_pd();  // New Z component
 
+    // Process objects in batches of 4
     for (size_t i = start; i < end; i += 4) {
-        __m256d obj2_x, obj2_y, mass;
+        __m256d obj2_x, obj2_y, obj2_z, mass;
 
         if (i + 3 < end) {
+            // Load 4 objects' data into AVX registers
             obj2_x = _mm256_setr_pd(objects[i].position.x, objects[i+1].position.x, objects[i+2].position.x, objects[i+3].position.x);
             obj2_y = _mm256_setr_pd(objects[i].position.y, objects[i+1].position.y, objects[i+2].position.y, objects[i+3].position.y);
+            obj2_z = _mm256_setr_pd(objects[i].position.z, objects[i+1].position.z, objects[i+2].position.z, objects[i+3].position.z);
             mass = _mm256_setr_pd(objects[i].mass, objects[i+1].mass, objects[i+2].mass, objects[i+3].mass);
         } else {
             // Handle the last incomplete batch
-            double x_array[4] = {0}, y_array[4] = {0}, m_array[4] = {0};
+            double x_array[4] = {0}, y_array[4] = {0}, z_array[4] = {0}, m_array[4] = {0};
             for (size_t j = 0; j < end - i; ++j) {
                 x_array[j] = objects[i+j].position.x;
                 y_array[j] = objects[i+j].position.y;
+                z_array[j] = objects[i+j].position.z;
                 m_array[j] = objects[i+j].mass;
             }
             obj2_x = _mm256_loadu_pd(x_array);
             obj2_y = _mm256_loadu_pd(y_array);
+            obj2_z = _mm256_loadu_pd(z_array);
             mass = _mm256_loadu_pd(m_array);
         }
 
+        // Calculate distance vectors
         __m256d dx = _mm256_sub_pd(obj2_x, obj1_x);
         __m256d dy = _mm256_sub_pd(obj2_y, obj1_y);
-        __m256d r2 = _mm256_add_pd(_mm256_mul_pd(dx, dx), _mm256_mul_pd(dy, dy));
+        __m256d dz = _mm256_sub_pd(obj2_z, obj1_z);
+
+        // Calculate squared distance
+        __m256d r2 = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(dx, dx), _mm256_mul_pd(dy, dy)), _mm256_mul_pd(dz, dz));
+
+        // Calculate distance and cube of distance
         __m256d r = _mm256_sqrt_pd(r2);
         __m256d r3 = _mm256_mul_pd(r, _mm256_mul_pd(r, r));
 
+        // Calculate gravitational force
         __m256d force = _mm256_div_pd(_mm256_mul_pd(g_const, mass), r3);
         force = _mm256_min_pd(force, max_force);
 
+        // Apply epsilon check to avoid division by zero
         __m256d mask = _mm256_cmp_pd(r2, epsilon, _CMP_GT_OQ);
         force = _mm256_and_pd(force, mask);
 
+        // Accumulate acceleration components
         acc_x = _mm256_add_pd(acc_x, _mm256_mul_pd(force, dx));
         acc_y = _mm256_add_pd(acc_y, _mm256_mul_pd(force, dy));
+        acc_z = _mm256_add_pd(acc_z, _mm256_mul_pd(force, dz));
     }
 
     // Sum up the vector components
     double acc_x_sum = _mm256_reduce_add_pd(acc_x);
     double acc_y_sum = _mm256_reduce_add_pd(acc_y);
+    double acc_z_sum = _mm256_reduce_add_pd(acc_z);
 
     // Set the final acceleration
-    object1.acceleration = {acc_x_sum, acc_y_sum};
+    object1.acceleration = Vector3{acc_x_sum, acc_y_sum, acc_z_sum};
 }
 #endif
 // Non-AVX version of gravity calculation
