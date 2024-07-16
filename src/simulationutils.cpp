@@ -251,20 +251,6 @@ void calculate_gravity_normal(Object& object1, const std::vector<Object>& object
     object1.acceleration = acc;
 }
 
-
-// Function to choose between AVX and normal calculation
-void calculate_gravity(Object& object1, std::vector<Object>& objects, size_t start, size_t end) {
-#ifdef USE_GPU
-    calculate_gravity_gpu(objects);
-#else
-    #ifdef USE_AVX2
-        calculate_gravity_simd(object1, objects, start, end);
-    #else
-        calculate_gravity_normal(object1, objects, start, end);
-    #endif
-#endif
-}
-
 void updateObjectTrail(Object& obj) {
     if (obj.trail.empty()) {
         obj.trail.push_back(obj.position);
@@ -365,7 +351,11 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
             size_t end = std::min(i + batchSize, numObjects);
             gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
                 for (size_t j = i; j < end; ++j) {
+                    #ifdef USE_AVX2
+                    calculate_gravity_simd(allObjects[j], allObjects, 0, allObjects.size());
+                    #else
                     calculate_gravity_normal(allObjects[j], allObjects, 0, allObjects.size());
+                    #endif
                 }
             }));
         }
