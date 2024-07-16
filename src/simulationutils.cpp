@@ -1,9 +1,142 @@
 #include "../include/simulationutils.h"
 #include <iostream>
 #include "../include/settings.h"
-#include <cpuid.h>
+#ifndef USE_GPU
+    #include <cpuid.h>
+#endif
+#include <fstream>
 #ifdef USE_AVX2
 #include <immintrin.h>
+#endif
+#ifdef USE_GPU
+#include <CL/opencl.hpp>
+// Global OpenCL variables
+cl::Context context;
+cl::CommandQueue queue;
+cl::Kernel kernel;
+cl::Program program;
+cl::Buffer d_positions;
+cl::Buffer d_masses;
+cl::Buffer d_accelerations;
+
+// Function to initialize OpenCL
+void initOpenCL() {
+    // Get available platforms
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+
+    if (platforms.empty()) {
+        std::cerr << "No OpenCL platforms found" << std::endl;
+        exit(1);
+    }
+
+    // Select the first platform
+    cl::Platform platform = platforms[0];
+
+    // Get available devices
+    std::vector<cl::Device> devices;
+    platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+
+    if (devices.empty()) {
+        std::cerr << "No OpenCL devices found" << std::endl;
+        exit(1);
+    }
+
+    // Select the first device
+    cl::Device device = devices[0];
+
+    // Create a context
+    context = cl::Context({device});
+
+    // Create a command queue
+    queue = cl::CommandQueue(context, device);
+
+    // Read the kernel source
+    const char* kernelSource = R"(
+__kernel void calculate_gravity(
+    __global const float4* positions,
+    __global const float* masses,
+    __global float4* accelerations,
+    const float G,
+    const float epsilon,
+    const float max_force,
+    const int num_objects
+) {
+    int gid = get_global_id(0);
+    if (gid >= num_objects) return;
+
+    float4 pos1 = positions[gid];
+    float4 acc = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+
+    for (int i = 0; i < num_objects; i++) {
+        if (i == gid) continue;
+
+        float4 pos2 = positions[i];
+        float4 r = pos2 - pos1;
+        float dist2 = r.x*r.x + r.y*r.y + r.z*r.z;
+
+        if (dist2 > epsilon) {
+            float inv_dist = rsqrt(dist2);
+            float inv_dist3 = inv_dist * inv_dist * inv_dist;
+            float force = min(G * masses[i] * inv_dist3, max_force);
+            acc += force * r;
+        }
+    }
+
+    accelerations[gid] = acc;
+}
+)";
+    // Create the program
+    program = cl::Program(context, kernelSource);
+
+    // Build the program
+    if (program.build({device}) != CL_SUCCESS) {
+        std::cerr << "Error building: " << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << std::endl;
+        exit(1);
+    }
+
+    // Create the kernel
+    kernel = cl::Kernel(program, "calculate_gravity");
+}
+
+void calculate_gravity_gpu(std::vector<Object>& objects) {
+    int num_objects = objects.size();
+
+    // Prepare data for GPU
+    std::vector<cl_float4> positions(num_objects);
+    std::vector<float> masses(num_objects);
+    std::vector<cl_float4> accelerations(num_objects);
+
+    for (int i = 0; i < num_objects; i++) {
+        positions[i] = {(float)objects[i].position.x, (float)objects[i].position.y, (float)objects[i].position.z, 0.0f};
+        masses[i] = (float)objects[i].mass;
+    }
+
+    // Create buffers
+    d_positions = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(cl_float4) * num_objects, positions.data());
+    d_masses = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * num_objects, masses.data());
+    d_accelerations = cl::Buffer(context, CL_MEM_WRITE_ONLY, sizeof(cl_float4) * num_objects);
+
+    // Set kernel arguments
+    kernel.setArg(0, d_positions);
+    kernel.setArg(1, d_masses);
+    kernel.setArg(2, d_accelerations);
+    kernel.setArg(3, (float)Settings::g_G);
+    kernel.setArg(4, (float)Settings::EPSILON);
+    kernel.setArg(5, (float)Settings::g_MAX_FORCE);
+    kernel.setArg(6, num_objects);
+
+    // Execute the kernel
+    queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(num_objects), cl::NullRange);
+
+    // Read the results
+    queue.enqueueReadBuffer(d_accelerations, CL_TRUE, 0, sizeof(cl_float4) * num_objects, accelerations.data());
+
+    // Update object accelerations
+    for (int i = 0; i < num_objects; i++) {
+        objects[i].acceleration = Vector3{accelerations[i].s[0], accelerations[i].s[1], accelerations[i].s[2]};
+    }
+}
 #endif
 
 #ifdef USE_AVX2
@@ -120,11 +253,15 @@ void calculate_gravity_normal(Object& object1, const std::vector<Object>& object
 
 
 // Function to choose between AVX and normal calculation
-void calculate_gravity(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-#ifdef USE_AVX2
-    calculate_gravity_simd(object1, objects, start, end);
+void calculate_gravity(Object& object1, std::vector<Object>& objects, size_t start, size_t end) {
+#ifdef USE_GPU
+    calculate_gravity_gpu(objects);
 #else
-    calculate_gravity_normal(object1, objects, start, end);
+    #ifdef USE_AVX2
+        calculate_gravity_simd(object1, objects, start, end);
+    #else
+        calculate_gravity_normal(object1, objects, start, end);
+    #endif
 #endif
 }
 
@@ -218,23 +355,26 @@ void handleCollision(Object& obj1, Object& obj2) {
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
     const size_t numObjects = allObjects.size();
     const size_t numThreads = pool.getThreadCount();
-    const size_t batchSize = std::max(size_t(1), numObjects / (numThreads * 4)); // Adjust this for optimal performance
-
+    const size_t batchSize = std::max(size_t(1), numObjects / (numThreads * 4));
     // Step 1: Gravity Calculation
-    std::vector<std::future<void>> gravityfutures;
-    for (size_t i = 0; i < numObjects; i += batchSize) {
-        size_t end = std::min(i + batchSize, numObjects);
-        gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
-            for (size_t j = i; j < end; ++j) {
-                calculate_gravity(allObjects[j], allObjects, 0, allObjects.size());
-            }
-        }));
-    }
+    #ifdef USE_GPU
+        calculate_gravity_gpu(allObjects);  // This now handles all objects at once
+    #else
+        std::vector<std::future<void>> gravityfutures;
+        for (size_t i = 0; i < numObjects; i += batchSize) {
+            size_t end = std::min(i + batchSize, numObjects);
+            gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
+                for (size_t j = i; j < end; ++j) {
+                    calculate_gravity_normal(allObjects[j], allObjects, 0, allObjects.size());
+                }
+            }));
+        }
 
-    // Wait for gravity calculations to complete
-    for (auto& future : gravityfutures) {
-        future.get();
-    }
+        // Wait for gravity calculations to complete
+        for (auto& future : gravityfutures) {
+            future.get();
+        }
+    #endif
 
     // Step 2: Update positions and trails
     std::vector<std::future<void>> updateFutures;

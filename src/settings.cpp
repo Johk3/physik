@@ -13,6 +13,7 @@ namespace Settings {
     double g_MAX_FORCE;
     int g_refreshRate;
     bool g_enableTrail;
+    bool g_drawArrow;
     bool g_enableLOD;
     bool g_simulate = true;
     const double EPSILON = 1e-6;
@@ -27,6 +28,7 @@ namespace Settings {
         g_MAX_FORCE = MAX_FORCE_INIT;
         g_refreshRate = REFRESH_RATE;
         g_enableTrail = ENABLE_TRAIL;
+        g_drawArrow = DRAW_ARROW;
         g_enableLOD = ENABLE_LOD;
         g_simulate = SIMULATE;
     }

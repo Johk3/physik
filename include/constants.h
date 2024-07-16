@@ -14,7 +14,8 @@ constexpr double PREVENT_DRAW_DISTANCE = 1.0;
 constexpr double GRAVITY = 6.67430e-11;
 constexpr double MAX_FORCE_INIT = 1e6;
 constexpr int REFRESH_RATE = 5000;
-constexpr bool ENABLE_TRAIL = true;
+constexpr bool ENABLE_TRAIL = false;
+constexpr bool DRAW_ARROW = true;
 constexpr bool ENABLE_LOD = true;
 constexpr bool SIMULATE = true;
 #endif //SETTINGS_H

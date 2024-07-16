@@ -37,7 +37,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
             lastY = ypos;
             firstMouse = false;
         }
-
         float xoffset = xpos - lastX;
         float yoffset = lastY - ypos;
         lastX = xpos;
@@ -124,9 +123,18 @@ int main() {
 
     // Make the simulation window's context current
     glfwMakeContextCurrent(simulationWindow);
-
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
     // Initialize settings
     Settings::initialize();
+
+    // Initialize opencl
+    #ifdef USE_GPU
+        initOpenCL();
+    #endif
 
     // Initialize objects
     std::vector<Object> allObjects = get_objects();

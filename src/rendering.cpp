@@ -13,6 +13,19 @@ void drawSphere(const Vector3& position, double radius, const double r, const do
 
     glPushMatrix();
     glTranslatef(position.x, position.y, position.z);
+
+    // Set material properties
+    GLfloat mat_ambient[] = { static_cast<GLfloat>(r) * 0.3f, static_cast<GLfloat>(g) * 0.3f, static_cast<GLfloat>(b) * 0.3f, static_cast<GLfloat>(alpha) };
+    GLfloat mat_diffuse[] = { static_cast<GLfloat>(r), static_cast<GLfloat>(g), static_cast<GLfloat>(b), static_cast<GLfloat>(alpha) };
+    GLfloat mat_specular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+    GLfloat mat_shininess[] = { 50.0f };
+
+    glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
+
+    // Set the color
     glColor4f(r, g, b, alpha);
 
     for (int i = 0; i <= stacks; ++i) {
@@ -39,6 +52,69 @@ void drawSphere(const Vector3& position, double radius, const double r, const do
     }
 
     glPopMatrix();
+}
+void drawSlimArrow(const Vector3& start, const Vector3& direction, float length, float r, float g, float b) {
+    Vector3 end;
+    end.x = start.x + direction.x * length;
+    end.y = start.y + direction.y * length;
+    end.z = start.z + direction.z * length;
+
+    // Draw the arrow body
+    glColor3f(r, g, b);
+    glLineWidth(2.0f);  // Make the line slimmer
+    glBegin(GL_LINES);
+    glVertex3f(start.x, start.y, start.z);
+    glVertex3f(end.x, end.y, end.z);
+    glEnd();
+
+    // Draw the arrow head
+    float arrowHeadLength = length * 0.2f; // 20% of the arrow length
+    float arrowHeadWidth = arrowHeadLength * 0.5f;
+
+    Vector3 up, right;
+
+    // Calculate an arbitrary 'up' vector
+    if (std::abs(direction.x) < std::abs(direction.y) && std::abs(direction.x) < std::abs(direction.z)) {
+        up.x = 1; up.y = 0; up.z = 0;
+    } else if (std::abs(direction.y) < std::abs(direction.z)) {
+        up.x = 0; up.y = 1; up.z = 0;
+    } else {
+        up.x = 0; up.y = 0; up.z = 1;
+    }
+
+    // Calculate right vector
+    right.x = direction.y * up.z - direction.z * up.y;
+    right.y = direction.z * up.x - direction.x * up.z;
+    right.z = direction.x * up.y - direction.y * up.x;
+    float rightLength = std::sqrt(right.x * right.x + right.y * right.y + right.z * right.z);
+    right.x /= rightLength; right.y /= rightLength; right.z /= rightLength;
+
+    // Recalculate up vector
+    up.x = right.y * direction.z - right.z * direction.y;
+    up.y = right.z * direction.x - right.x * direction.z;
+    up.z = right.x * direction.y - right.y * direction.x;
+
+    glBegin(GL_TRIANGLES);
+    // Arrow head in XY plane
+    glVertex3f(end.x, end.y, end.z);
+    glVertex3f(end.x - direction.x * arrowHeadLength + right.x * arrowHeadWidth,
+               end.y - direction.y * arrowHeadLength + right.y * arrowHeadWidth,
+               end.z - direction.z * arrowHeadLength + right.z * arrowHeadWidth);
+    glVertex3f(end.x - direction.x * arrowHeadLength - right.x * arrowHeadWidth,
+               end.y - direction.y * arrowHeadLength - right.y * arrowHeadWidth,
+               end.z - direction.z * arrowHeadLength - right.z * arrowHeadWidth);
+
+    // Arrow head in XZ plane
+    glVertex3f(end.x, end.y, end.z);
+    glVertex3f(end.x - direction.x * arrowHeadLength + up.x * arrowHeadWidth,
+               end.y - direction.y * arrowHeadLength + up.y * arrowHeadWidth,
+               end.z - direction.z * arrowHeadLength + up.z * arrowHeadWidth);
+    glVertex3f(end.x - direction.x * arrowHeadLength - up.x * arrowHeadWidth,
+               end.y - direction.y * arrowHeadLength - up.y * arrowHeadWidth,
+               end.z - direction.z * arrowHeadLength - up.z * arrowHeadWidth);
+    glEnd();
+
+    glLineWidth(1.0f);  // Reset line width
 }
 
 
@@ -83,24 +159,55 @@ void drawCircle(const double x, const double y, const double radius, const doubl
 
 // Draws an object and its trail on the screen
 void drawObject(const Object& obj) {
-
-    // Draw trail
+    // Draw trail (if enabled)
     if (Settings::g_enableTrail) {
         for (size_t i = 0; i < obj.trail.size(); ++i) {
             if (std::abs(obj.trail[i].x) > PREVENT_DRAW_DISTANCE or std::abs(obj.trail[i].y) > PREVENT_DRAW_DISTANCE) continue;
             double alpha = static_cast<double>(i) / obj.trail.size();
             double trailRadius = obj.radius * TRAIL_SCALE * alpha;
-            // drawCircle(obj.trail[i].x, obj.trail[i].y, trailRadius, obj.r, obj.g, obj.b, alpha);
             drawSphere(obj.trail[i], trailRadius, obj.r, obj.g, obj.b, alpha);
         }
-    };
-
-    // Draw main object
+    }
+    // Draw the sphere
     if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
-    //drawCircle(obj.position.x, obj.position.y, obj.radius, obj.r, obj.g, obj.b, 1.0);
     drawSphere(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
-}
+    if (Settings::g_drawArrow){
+    // Draw direction arrow
+    float velocityLength = std::sqrt(obj.velocity.x * obj.velocity.x + obj.velocity.y * obj.velocity.y + obj.velocity.z * obj.velocity.z);
+    float minVelocityThreshold = 0.01f; // Adjust this value as needed
 
+    if (velocityLength > minVelocityThreshold) {
+        Vector3 direction;
+        direction.x = obj.velocity.x / velocityLength;
+        direction.y = obj.velocity.y / velocityLength;
+        direction.z = obj.velocity.z / velocityLength;
+
+        float accelerationLength = std::sqrt(obj.acceleration.x * obj.acceleration.x +
+                                             obj.acceleration.y * obj.acceleration.y +
+                                             obj.acceleration.z * obj.acceleration.z);
+
+        // Adjust these scale factors as needed
+        float maxArrowLength = 0.1f; // Maximum arrow length in simulation units
+        float minArrowLength = 0.0f; // Minimum arrow length relative to object size
+        float arrowLength = std::min(accelerationLength * 0.1f, maxArrowLength);
+        arrowLength = std::max(arrowLength, minArrowLength);
+
+        // Use a color that contrasts with both light and dark objects
+        float arrowR = 1.0f - obj.r;
+        float arrowG = 1.0f - obj.g;
+        float arrowB = 1.0f - obj.b;
+
+        // Start the arrow from the edge of the sphere in the direction of motion
+        Vector3 arrowStart;
+        arrowStart.x = obj.position.x + direction.x * obj.radius;
+        arrowStart.y = obj.position.y + direction.y * obj.radius;
+        arrowStart.z = obj.position.z + direction.z * obj.radius;
+
+        drawSlimArrow(arrowStart, direction, arrowLength, arrowR, arrowG, arrowB);
+    }
+    }
+
+}
 // Renders the screen window based on objects on it
 void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -111,10 +218,21 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window, c
     glMatrixMode(GL_MODELVIEW);
     glLoadMatrixf(glm::value_ptr(view));
 
+    // Set up a basic light
+    GLfloat light_position[] = { 5.0f, 5.0f, 5.0f, 1.0f };
+    GLfloat light_ambient[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+    GLfloat light_diffuse[] = { 0.8f, 0.8f, 0.8f, 1.0f };
+    GLfloat light_specular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+
+    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+    glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
+
     for (const auto& obj : all_objects) {
         drawObject(obj);
     }
 
     glfwSwapBuffers(window);
     glfwPollEvents();
-};
+}

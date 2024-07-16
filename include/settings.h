@@ -13,6 +13,7 @@ namespace Settings {;
     extern int g_circleSegments;
     extern int g_refreshRate;
     extern bool g_enableTrail;
+    extern bool g_drawArrow;
     extern bool g_enableLOD;
     extern bool g_simulate;
 

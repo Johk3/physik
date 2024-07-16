@@ -19,7 +19,7 @@ public:
     double radius;
 
     std::vector<Vector3> trail;
-    float TRAIL_SPACING;
+    double TRAIL_SPACING;
     size_t MAX_TRAIL_LENGTH;
 };
 

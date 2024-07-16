@@ -12,9 +12,10 @@ extern double g_G;
 extern double g_MAX_FORCE;
 extern int g_circleSegments;
 extern int g_refreshRate;
-extern int g_enable_trail;
-extern int g_enable_lod;
-extern int g_simulate;
+extern bool g_enable_trail;
+extern bool g_drawArrow;
+extern bool g_enable_lod;
+extern bool g_simulate;
 
 void updateFPS();
 void renderControlPanel(GLFWwindow* controlWindow);
