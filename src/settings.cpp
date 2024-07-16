@@ -15,6 +15,7 @@ namespace Settings {
     int g_refreshRate;
     bool g_enableTrail;
     bool g_drawArrow;
+    bool g_drawShadow;
     bool g_enableLOD;
     bool g_simulate = true;
     const double EPSILON = 1e-6;
@@ -30,6 +31,7 @@ namespace Settings {
         g_refreshRate = REFRESH_RATE;
         g_enableTrail = ENABLE_TRAIL;
         g_drawArrow = DRAW_ARROW;
+        g_drawShadow = DRAW_SHADOW;
         g_enableLOD = ENABLE_LOD;
         g_simulate = SIMULATE;
     }

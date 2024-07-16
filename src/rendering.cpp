@@ -1,4 +1,7 @@
 #include "../include/rendering.h"
+
+#include <GLFW/glfw3native.h>
+
 #include "../include/constants.h"
 #include "../include/linmath.h"
 #include "../include/settings.h"
@@ -8,17 +11,56 @@
 #include <glm/gtc/type_ptr.hpp>
 
 void drawSphere(const Vector3& position, double radius, const double r, const double g, const double b, const double alpha) {
-    int stacks = 20;
-    int slices = 20;
+    // Cache these values to avoid recalculation
+    static const int stacks = 20;
+    static const int slices = 20;
+
+    // Use display lists for static objects
+    static GLuint sphereDisplayList = 0;
+
+    if (sphereDisplayList == 0) {
+        // Create a display list for the sphere
+        sphereDisplayList = glGenLists(1);
+        glNewList(sphereDisplayList, GL_COMPILE);
+
+        // Draw the sphere geometry
+        for (int i = 0; i <= stacks; ++i) {
+            double lat0 = M_PI * (-0.5 + (double)(i - 1) / stacks);
+            double z0 = sin(lat0);
+            double zr0 = cos(lat0);
+
+            double lat1 = M_PI * (-0.5 + (double)i / stacks);
+            double z1 = sin(lat1);
+            double zr1 = cos(lat1);
+
+            glBegin(GL_QUAD_STRIP);
+            for (int j = 0; j <= slices; ++j) {
+                double lng = 2 * M_PI * (double)(j - 1) / slices;
+                double x = cos(lng);
+                double y = sin(lng);
+
+                glNormal3d(x * zr0, y * zr0, z0);
+                glVertex3d(x * zr0, y * zr0, z0);
+                glNormal3d(x * zr1, y * zr1, z1);
+                glVertex3d(x * zr1, y * zr1, z1);
+            }
+            glEnd();
+        }
+
+        glEndList();
+    }
 
     glPushMatrix();
-    glTranslatef(position.x, position.y, position.z);
+    glTranslated(position.x, position.y, position.z);
+    glScaled(radius, radius, radius);
 
     // Set material properties
-    GLfloat mat_ambient[] = { static_cast<GLfloat>(r) * 0.3f, static_cast<GLfloat>(g) * 0.3f, static_cast<GLfloat>(b) * 0.3f, static_cast<GLfloat>(alpha) };
-    GLfloat mat_diffuse[] = { static_cast<GLfloat>(r), static_cast<GLfloat>(g), static_cast<GLfloat>(b), static_cast<GLfloat>(alpha) };
-    GLfloat mat_specular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
-    GLfloat mat_shininess[] = { 50.0f };
+    // Adjust material properties for less contrast
+    GLfloat mat_ambient[] = { static_cast<GLfloat>(r) * 0.4f, static_cast<GLfloat>(g) * 0.4f, static_cast<GLfloat>(b) * 0.4f, static_cast<GLfloat>(alpha) };
+    GLfloat mat_diffuse[] = { static_cast<GLfloat>(r) * 0.7f, static_cast<GLfloat>(g) * 0.7f, static_cast<GLfloat>(b) * 0.7f, static_cast<GLfloat>(alpha) };
+    GLfloat mat_specular[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+    GLfloat mat_shininess[] = { 30.0f };
+
 
     glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
@@ -26,7 +68,23 @@ void drawSphere(const Vector3& position, double radius, const double r, const do
     glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
 
     // Set the color
-    glColor4f(r, g, b, alpha);
+    glColor4d(r * 0.8, g * 0.8, b * 0.8, alpha);
+
+    // Call the display list
+    glCallList(sphereDisplayList);
+
+    glPopMatrix();
+}
+
+void drawSphereWithShadows(const Vector3& position, double radius, const double r, const double g, const double b, const double alpha) {
+    const int stacks = 20;
+    const int slices = 20;
+
+    glPushMatrix();
+    glTranslated(position.x, position.y, position.z);
+
+    // Set color
+    glColor4d(r, g, b, alpha);
 
     for (int i = 0; i <= stacks; ++i) {
         double lat0 = M_PI * (-0.5 + (double)(i - 1) / stacks);
@@ -37,16 +95,17 @@ void drawSphere(const Vector3& position, double radius, const double r, const do
         double z1 = sin(lat1);
         double zr1 = cos(lat1);
 
-        glBegin(GL_QUAD_STRIP);
+        glBegin(GL_TRIANGLE_STRIP);
         for (int j = 0; j <= slices; ++j) {
-            double lng = 2 * M_PI * (double)(j - 1) / slices;
+            double lng = 2 * M_PI * (double)j / slices;
             double x = cos(lng);
             double y = sin(lng);
 
-            glNormal3f(x * zr0, y * zr0, z0);
-            glVertex3f(x * zr0 * radius, y * zr0 * radius, z0 * radius);
-            glNormal3f(x * zr1, y * zr1, z1);
-            glVertex3f(x * zr1 * radius, y * zr1 * radius, z1 * radius);
+            glNormal3d(x * zr0, y * zr0, z0);
+            glVertex3d(radius * x * zr0, radius * y * zr0, radius * z0);
+
+            glNormal3d(x * zr1, y * zr1, z1);
+            glVertex3d(radius * x * zr1, radius * y * zr1, radius * z1);
         }
         glEnd();
     }
@@ -165,12 +224,21 @@ void drawObject(const Object& obj) {
             if (std::abs(obj.trail[i].x) > PREVENT_DRAW_DISTANCE or std::abs(obj.trail[i].y) > PREVENT_DRAW_DISTANCE) continue;
             double alpha = static_cast<double>(i) / obj.trail.size();
             double trailRadius = obj.radius * TRAIL_SCALE * alpha;
-            drawSphere(obj.trail[i], trailRadius, obj.r, obj.g, obj.b, alpha);
+            if(Settings::g_drawShadow) {
+                drawSphereWithShadows(obj.trail[i], trailRadius, obj.r, obj.g, obj.b, alpha);
+            }else {
+                drawSphere(obj.trail[i], trailRadius, obj.r, obj.g, obj.b, alpha);
+
+            }
         }
     }
     // Draw the sphere
     if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
-    drawSphere(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+    if(Settings::g_drawShadow) {
+        drawSphereWithShadows(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+    }else {
+        drawSphere(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+    }
     if (Settings::g_drawArrow){
     // Draw direction arrow
     float velocityLength = std::sqrt(obj.velocity.x * obj.velocity.x + obj.velocity.y * obj.velocity.y + obj.velocity.z * obj.velocity.z);
@@ -218,16 +286,24 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window, c
     glMatrixMode(GL_MODELVIEW);
     glLoadMatrixf(glm::value_ptr(view));
 
-    // Set up a basic light
-    GLfloat light_position[] = { 5.0f, 5.0f, 5.0f, 1.0f };
-    GLfloat light_ambient[] = { 0.2f, 0.2f, 0.2f, 1.0f };
-    GLfloat light_diffuse[] = { 0.8f, 0.8f, 0.8f, 1.0f };
-    GLfloat light_specular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+    // Set up a softer light
+    GLfloat light_position[] = { 10.0f, 10.0f, 10.0f, 1.0f };  // Moved light further away
+    GLfloat light_ambient[] = { 0.3f, 0.3f, 0.3f, 1.0f };      // Increased ambient light
+    GLfloat light_diffuse[] = { 0.6f, 0.6f, 0.6f, 1.0f };      // Reduced diffuse light
+    GLfloat light_specular[] = { 0.2f, 0.2f, 0.2f, 1.0f };     // Reduced specular light
 
     glLightfv(GL_LIGHT0, GL_POSITION, light_position);
     glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
     glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
+
+    // Disable lighting temporarily
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+
+    // Enable vertex color tracking
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
 
     for (const auto& obj : all_objects) {
         drawObject(obj);

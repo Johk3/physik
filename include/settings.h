@@ -16,6 +16,7 @@ namespace Settings {;
     extern bool g_enableTrail;
     extern bool g_drawArrow;
     extern bool g_enableLOD;
+    extern bool g_drawShadow;
     extern bool g_simulate;
 
     void initialize();

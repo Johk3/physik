@@ -83,6 +83,9 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     // Direction arrow
     ImGui::Checkbox("Enable Arrows", &Settings::g_drawArrow);
 
+    // Shadow box
+    ImGui::Checkbox("Enable Shadows", &Settings::g_drawShadow);
+
     // Enable LOD
     ImGui::Checkbox("Enable LOD", &Settings::g_enableLOD);
 
@@ -103,10 +106,12 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     const std::string sim_text = std::string("Simulation is: ") + ui_toggle_text(Settings::g_simulate);
     const std::string trail_text = std::string("Trail is: ") + ui_toggle_text(Settings::g_enableTrail);
     const std::string arrow_text = std::string("Arrow is: ") + ui_toggle_text(Settings::g_enableTrail);
+    const std::string shadow_text = std::string("Shadow is: ") + ui_toggle_text(Settings::g_drawShadow);
     const std::string lod_text = std::string("LOD is: ") + ui_toggle_text(Settings::g_enableLOD);
 
     ImGui::Text(trail_text.c_str());
     ImGui::Text(arrow_text.c_str());
+    ImGui::Text(shadow_text.c_str());
     ImGui::Text(lod_text.c_str());
     ImGui::Text(sim_text.c_str());
 

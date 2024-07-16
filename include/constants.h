@@ -17,6 +17,7 @@ constexpr double ARROW_PROPORTIONALITY = 1.5;
 constexpr int REFRESH_RATE = 5000;
 constexpr bool ENABLE_TRAIL = false;
 constexpr bool DRAW_ARROW = true;
+constexpr bool DRAW_SHADOW = false;
 constexpr bool ENABLE_LOD = true;
 constexpr bool SIMULATE = true;
 #endif //SETTINGS_H
