@@ -411,8 +411,6 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
     }
 }
 
-
-
 std::vector<Object> get_objects() {
     std::vector<Object> allObjects;
 
@@ -424,11 +422,17 @@ std::vector<Object> get_objects() {
                 const float g = float(j) / 9.0f;
                 const float b = float(k) / 9.0f;
 
-                allObjects.emplace_back(Vector3{-0.5f + i * 0.1f, -0.5f + j * 0.1f, -0.5f + k * 0.1f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, r, g, b);
+                allObjects.emplace_back(Vector3{-0.5f + i * 0.1f, -0.5f + j * 0.1f, -0.5f + k * 0.1f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, r, g, b, ObjectShape::SPHERE);
             }
         }
     }
-    allObjects.emplace_back(Vector3{0.02, -0.5f, 0.0f}, Vector3{0.0f, 0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0);
+    allObjects.emplace_back(Vector3{0.02, -0.5f, 0.0f}, Vector3{0.0f, 0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0, ObjectShape::SPHERE);
+
+    // Add examples of new shapes
+    allObjects.emplace_back(Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 1.0, 0.0, 0.0, ObjectShape::TRIANGLE);
+    allObjects.emplace_back(Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 0.0, 1.0, 0.0, ObjectShape::FLAT_SURFACE);
+    allObjects.emplace_back(Vector3{0.5f, -0.5f, -0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 0.0, 0.0, 1.0, ObjectShape::CONTAINER);
+    allObjects.emplace_back(Vector3{-0.5f, 0.5f, -0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 1.0, 1.0, 0.0, ObjectShape::COW);
 
     return allObjects;
 }

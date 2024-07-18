@@ -214,6 +214,151 @@ void drawCircle(const double x, const double y, const double radius, const doubl
     }
     glEnd();
 }
+
+void drawTriangle(const Vector3& position, double size, const double r, const double g, const double b, const double alpha) {
+    glPushMatrix();
+    glTranslated(position.x, position.y, position.z);
+
+    glColor4d(r, g, b, alpha);
+    glBegin(GL_TRIANGLES);
+    glVertex3d(-size/2, -size/2, 0);
+    glVertex3d(size/2, -size/2, 0);
+    glVertex3d(0, size/2, 0);
+    glEnd();
+
+    glPopMatrix();
+}
+
+void drawFlatSurface(const Vector3& position, double width, double length, const double r, const double g, const double b, const double alpha) {
+    glPushMatrix();
+    glTranslated(position.x, position.y, position.z);
+
+    glColor4d(r, g, b, alpha);
+    glBegin(GL_QUADS);
+    glVertex3d(-width/2, 0, -length/2);
+    glVertex3d(width/2, 0, -length/2);
+    glVertex3d(width/2, 0, length/2);
+    glVertex3d(-width/2, 0, length/2);
+    glEnd();
+
+    glPopMatrix();
+}
+
+void drawContainer(const Vector3& position, double width, double height, double depth, const double r, const double g, const double b, const double alpha) {
+    glPushMatrix();
+    glTranslated(position.x, position.y, position.z);
+
+    glColor4d(r, g, b, alpha);
+
+    // Bottom
+    glBegin(GL_QUADS);
+    glVertex3d(-width/2, 0, -depth/2);
+    glVertex3d(width/2, 0, -depth/2);
+    glVertex3d(width/2, 0, depth/2);
+    glVertex3d(-width/2, 0, depth/2);
+    glEnd();
+
+    // Sides
+    glBegin(GL_QUADS);
+    // Front
+    glVertex3d(-width/2, 0, depth/2);
+    glVertex3d(width/2, 0, depth/2);
+    glVertex3d(width/2, height, depth/2);
+    glVertex3d(-width/2, height, depth/2);
+    // Back
+    glVertex3d(-width/2, 0, -depth/2);
+    glVertex3d(width/2, 0, -depth/2);
+    glVertex3d(width/2, height, -depth/2);
+    glVertex3d(-width/2, height, -depth/2);
+    // Left
+    glVertex3d(-width/2, 0, -depth/2);
+    glVertex3d(-width/2, 0, depth/2);
+    glVertex3d(-width/2, height, depth/2);
+    glVertex3d(-width/2, height, -depth/2);
+    // Right
+    glVertex3d(width/2, 0, -depth/2);
+    glVertex3d(width/2, 0, depth/2);
+    glVertex3d(width/2, height, depth/2);
+    glVertex3d(width/2, height, -depth/2);
+    glEnd();
+
+    glPopMatrix();
+}
+
+// Helper function to draw a cube for the cow
+void drawCube(double size) {
+    glBegin(GL_QUADS);
+    // Front face
+    glVertex3d(-size/2, -size/2, size/2);
+    glVertex3d(size/2, -size/2, size/2);
+    glVertex3d(size/2, size/2, size/2);
+    glVertex3d(-size/2, size/2, size/2);
+
+    // Back face
+    glVertex3d(-size/2, -size/2, -size/2);
+    glVertex3d(size/2, -size/2, -size/2);
+    glVertex3d(size/2, size/2, -size/2);
+    glVertex3d(-size/2, size/2, -size/2);
+
+    // Left face
+    glVertex3d(-size/2, -size/2, -size/2);
+    glVertex3d(-size/2, -size/2, size/2);
+    glVertex3d(-size/2, size/2, size/2);
+    glVertex3d(-size/2, size/2, -size/2);
+
+    // Right face
+    glVertex3d(size/2, -size/2, -size/2);
+    glVertex3d(size/2, -size/2, size/2);
+    glVertex3d(size/2, size/2, size/2);
+    glVertex3d(size/2, size/2, -size/2);
+
+    // Top face
+    glVertex3d(-size/2, size/2, -size/2);
+    glVertex3d(size/2, size/2, -size/2);
+    glVertex3d(size/2, size/2, size/2);
+    glVertex3d(-size/2, size/2, size/2);
+
+    // Bottom face
+    glVertex3d(-size/2, -size/2, -size/2);
+    glVertex3d(size/2, -size/2, -size/2);
+    glVertex3d(size/2, -size/2, size/2);
+    glVertex3d(-size/2, -size/2, size/2);
+    glEnd();
+}
+
+void drawCow(const Vector3& position, double size, const double r, const double g, const double b, const double alpha) {
+    glPushMatrix();
+    glTranslated(position.x, position.y, position.z);
+    glScaled(size, size, size);
+
+    glColor4d(r, g, b, alpha);
+
+    // Body
+    glPushMatrix();
+    glScaled(1.0, 0.5, 0.7);
+    drawCube(1.0);
+    glPopMatrix();
+
+    // Head
+    glPushMatrix();
+    glTranslated(0.6, 0.3, 0);
+    drawCube(0.4);
+    glPopMatrix();
+
+    // Legs
+    for (int i = -1; i <= 1; i += 2) {
+        for (int j = -1; j <= 1; j += 2) {
+            glPushMatrix();
+            glTranslated(i*0.3, -0.3, j*0.2);
+            glScaled(0.1, 0.6, 0.1);
+            drawCube(1.0);
+            glPopMatrix();
+        }
+    }
+
+    glPopMatrix();
+}
+
 // -- Objects which can be drawn
 
 // Draws an object and its trail on the screen
@@ -232,12 +377,28 @@ void drawObject(const Object& obj) {
             }
         }
     }
-    // Draw the sphere
+    // Draw the object
     if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
-    if(Settings::g_drawShadow) {
-        drawSphereWithShadows(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
-    }else {
-        drawSphere(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+    switch(obj.shape) {
+        case ObjectShape::SPHERE:
+            if(Settings::g_drawShadow) {
+                drawSphereWithShadows(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+            } else {
+                drawSphere(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+            }
+        break;
+        case ObjectShape::TRIANGLE:
+            drawTriangle(obj.position, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
+        break;
+        case ObjectShape::FLAT_SURFACE:
+            drawFlatSurface(obj.position, obj.radius * 4, obj.radius * 4, obj.r, obj.g, obj.b, 1.0);
+        break;
+        case ObjectShape::CONTAINER:
+            drawContainer(obj.position, obj.radius * 2, obj.radius * 2, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
+        break;
+        case ObjectShape::COW:
+            drawCow(obj.position, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
+        break;
     }
     if (Settings::g_drawArrow){
     // Draw direction arrow
