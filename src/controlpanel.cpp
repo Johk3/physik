@@ -89,6 +89,9 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     // Enable LOD
     ImGui::Checkbox("Enable LOD", &Settings::g_enableLOD);
 
+    // Rotation
+    ImGui::Checkbox("Enable Rotation", &Settings::g_enableRotation);
+
     // Simulate
     ImGui::Checkbox("Physics simulation", &Settings::g_simulate);
 
@@ -108,12 +111,14 @@ void renderControlPanel(GLFWwindow* controlWindow) {
     const std::string arrow_text = std::string("Arrow is: ") + ui_toggle_text(Settings::g_enableTrail);
     const std::string shadow_text = std::string("Shadow is: ") + ui_toggle_text(Settings::g_drawShadow);
     const std::string lod_text = std::string("LOD is: ") + ui_toggle_text(Settings::g_enableLOD);
+    const std::string rotation_text = std::string("Rotation is: ") + ui_toggle_text(Settings::g_enableRotation);
 
     ImGui::Text(trail_text.c_str());
     ImGui::Text(arrow_text.c_str());
     ImGui::Text(shadow_text.c_str());
     ImGui::Text(lod_text.c_str());
     ImGui::Text(sim_text.c_str());
+    ImGui::Text(rotation_text.c_str());
 
     ImGui::End();
 

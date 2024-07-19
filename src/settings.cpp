@@ -18,6 +18,7 @@ namespace Settings {
     bool g_drawShadow;
     bool g_enableLOD;
     bool g_simulate = true;
+    bool g_enableRotation = true;
     const double EPSILON = 1e-6;
 
     void initialize() {
@@ -34,6 +35,7 @@ namespace Settings {
         g_drawShadow = DRAW_SHADOW;
         g_enableLOD = ENABLE_LOD;
         g_simulate = SIMULATE;
+        g_enableRotation = true;
     }
 
     void update() {

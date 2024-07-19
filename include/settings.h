@@ -18,6 +18,7 @@ namespace Settings {;
     extern bool g_enableLOD;
     extern bool g_drawShadow;
     extern bool g_simulate;
+    extern bool g_enableRotation;
 
     void initialize();
     void update();

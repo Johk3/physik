@@ -56,6 +56,14 @@ struct Vector3 {
         return {x * scalar, y * scalar, z * scalar};
     }
 
+    Vector3 operator-() const {
+        return {-x, -y, -z};
+    }
+
+    constexpr Vector3 operator/(double scalar) const {
+        return {x / scalar, y / scalar, z / scalar};
+    }
+
     [[nodiscard]] double length() const {
         return std::sqrt(x*x + y*y + z*z);
     }
@@ -70,7 +78,7 @@ struct Vector3 {
     }
 
     Vector3 normalize() const {
-        float len = length();
+        double len = length();
         if (len > 0) {
             return {x / len, y / len, z / len};
         }
@@ -83,6 +91,27 @@ struct Vector3 {
             z * other.x - x * other.z,
             x * other.y - y * other.x
         };
+    }
+
+
+    Vector3& operator+=(const Vector3& other) {
+        x += other.x; y += other.y; z += other.z;
+        return *this;
+    }
+
+    Vector3& operator-=(const Vector3& other) {
+        x -= other.x; y -= other.y; z -= other.z;
+        return *this;
+    }
+
+    Vector3& operator*=(double scalar) {
+        x *= scalar; y *= scalar; z *= scalar;
+        return *this;
+    }
+
+    Vector3& operator/=(double scalar) {
+        x /= scalar; y /= scalar; z /= scalar;
+        return *this;
     }
 
 

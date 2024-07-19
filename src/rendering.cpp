@@ -469,33 +469,43 @@ void drawObject(const Object& obj) {
                 drawSphereWithShadows(obj.trail[i], trailRadius, obj.r, obj.g, obj.b, alpha);
             }else {
                 drawSphere(obj.trail[i], trailRadius, obj.r, obj.g, obj.b, alpha);
-
             }
         }
     }
+
     // Draw the object
     if (std::abs(obj.position.x) > PREVENT_DRAW_DISTANCE or std::abs(obj.position.y) > PREVENT_DRAW_DISTANCE) {return;};
+
+    glPushMatrix();
+    glTranslated(obj.position.x, obj.position.y, obj.position.z);
+    glRotated(obj.rotation.x * 180 / M_PI, 1, 0, 0);
+    glRotated(obj.rotation.y * 180 / M_PI, 0, 1, 0);
+    glRotated(obj.rotation.z * 180 / M_PI, 0, 0, 1);
+
     switch(obj.shape) {
         case ObjectShape::SPHERE:
             if(Settings::g_drawShadow) {
-                drawSphereWithShadows(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+                drawSphereWithShadows(Vector3{0,0,0}, obj.radius, obj.r, obj.g, obj.b, 1.0);
             } else {
-                drawSphere(obj.position, obj.radius, obj.r, obj.g, obj.b, 1.0);
+                drawSphere(Vector3{0,0,0}, obj.radius, obj.r, obj.g, obj.b, 1.0);
             }
         break;
         case ObjectShape::TRIANGLE:
-            drawTriangle(obj.position, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
+            drawTriangle(Vector3{0,0,0}, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
         break;
         case ObjectShape::FLAT_SURFACE:
-            drawFlatSurface(obj.position, obj.radius * 4, obj.radius * 4, obj.r, obj.g, obj.b, 1.0);
+            drawFlatSurface(Vector3{0,0,0}, obj.radius * 4, obj.radius * 4, obj.r, obj.g, obj.b, 1.0);
         break;
         case ObjectShape::CONTAINER:
-            drawContainer(obj.position, obj.radius * 2, obj.radius * 2, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
+            drawContainer(Vector3{0,0,0}, obj.radius * 2, obj.radius * 2, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
         break;
         case ObjectShape::COW:
-            drawCow(obj.position, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
+            drawCow(Vector3{0,0,0}, obj.radius * 2, obj.r, obj.g, obj.b, 1.0);
         break;
     }
+
+    glPopMatrix();
+
     if (Settings::g_drawArrow){
     // Draw direction arrow
     float velocityLength = std::sqrt(obj.velocity.x * obj.velocity.x + obj.velocity.y * obj.velocity.y + obj.velocity.z * obj.velocity.z);

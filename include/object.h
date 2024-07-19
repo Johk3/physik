@@ -3,6 +3,7 @@
 
 #include "vector2.h"
 #include <vector>
+
 enum class ObjectShape {
     SPHERE,
     TRIANGLE,
@@ -10,6 +11,7 @@ enum class ObjectShape {
     CONTAINER,
     COW
 };
+
 // Represents a physical object in the simulation
 class Object {
 public:
@@ -18,17 +20,23 @@ public:
     Vector3 position;
     Vector3 velocity;
     Vector3 acceleration;
+    Vector3 angularVelocity;
+    Vector3 rotation;
 
     double mass;
     double density;
     double r, g, b;
     double radius;
+    double momentOfInertia;
+    double rotationalFriction;  // New: Rotational friction coefficient
 
     std::vector<Vector3> trail;
     double TRAIL_SPACING;
     size_t MAX_TRAIL_LENGTH;
 
-    ObjectShape shape;  // New member to store the object's shape
+    ObjectShape shape;
+
+    void updateRotation(double deltaTime);
 };
 
 #endif // OBJECT_H

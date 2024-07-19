@@ -363,11 +363,37 @@ void handleCollision(Object& obj1, Object& obj2) {
         // Apply impulse
         Vector3 impulse = normal * impulseScalar;
 
-        // Update velocities
+        // Update linear velocities
         obj1.velocity = obj1.velocity - impulse * (1 / obj1.mass);
         obj2.velocity = obj2.velocity + impulse * (1 / obj2.mass);
+
+        // Calculate point of impact
+        Vector3 impactPoint = center1 + normal * radius1;
+
+        // Only apply angular impulses if rotation is enabled
+        if (Settings::g_enableRotation) {
+            // Calculate angular impulse
+            Vector3 r1 = impactPoint - obj1.position;
+            Vector3 r2 = impactPoint - obj2.position;
+
+            Vector3 angularImpulse1 = r1.cross(impulse);
+            Vector3 angularImpulse2 = r2.cross(impulse);
+
+            // Calculate impact speed
+            float impactSpeed = std::abs(velocityAlongNormal);
+
+            // Scale angular impulse based on impact speed
+            float angularImpulseScale = std::min(impactSpeed / 10.0f, 1.0f);  // Cap at 1.0
+            angularImpulse1 = angularImpulse1 * angularImpulseScale;
+            angularImpulse2 = angularImpulse2 * angularImpulseScale;
+
+            // Update angular velocities
+            obj1.angularVelocity = obj1.angularVelocity + angularImpulse1 * (1 / obj1.momentOfInertia);
+            obj2.angularVelocity = obj2.angularVelocity - angularImpulse2 * (1 / obj2.momentOfInertia);
+        }
     }
 }
+
 
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
     const size_t numObjects = allObjects.size();
@@ -406,6 +432,9 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
                 Object& obj = allObjects[j];
                 obj.velocity = obj.velocity + obj.acceleration * delta_time;
                 obj.position = obj.position + obj.velocity * delta_time;
+                if (Settings::g_enableRotation) {// Only update rotation if enabled
+                    obj.updateRotation(delta_time);
+                }
                 updateObjectTrail(obj);
             }
         }));
