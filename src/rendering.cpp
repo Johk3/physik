@@ -215,30 +215,126 @@ void drawCircle(const double x, const double y, const double radius, const doubl
     glEnd();
 }
 
-void drawTriangle(const Vector3& position, double size, const double r, const double g, const double b, const double alpha) {
-    glPushMatrix();
-    glTranslated(position.x, position.y, position.z);
-
-    glColor4d(r, g, b, alpha);
-    glBegin(GL_TRIANGLES);
-    glVertex3d(-size/2, -size/2, 0);
-    glVertex3d(size/2, -size/2, 0);
-    glVertex3d(0, size/2, 0);
-    glEnd();
-
-    glPopMatrix();
-}
-
 void drawFlatSurface(const Vector3& position, double width, double length, const double r, const double g, const double b, const double alpha) {
     glPushMatrix();
     glTranslated(position.x, position.y, position.z);
 
     glColor4d(r, g, b, alpha);
+
+    // Draw a rectangular prism
+    const double height = width / 2; // Make the height half of the width
     glBegin(GL_QUADS);
-    glVertex3d(-width/2, 0, -length/2);
-    glVertex3d(width/2, 0, -length/2);
-    glVertex3d(width/2, 0, length/2);
-    glVertex3d(-width/2, 0, length/2);
+
+    // Top face
+    glNormal3d(0, 1, 0);
+    glVertex3d(-width/2, height/2, -length/2);
+    glVertex3d(width/2, height/2, -length/2);
+    glVertex3d(width/2, height/2, length/2);
+    glVertex3d(-width/2, height/2, length/2);
+
+    // Bottom face
+    glNormal3d(0, -1, 0);
+    glVertex3d(-width/2, -height/2, -length/2);
+    glVertex3d(width/2, -height/2, -length/2);
+    glVertex3d(width/2, -height/2, length/2);
+    glVertex3d(-width/2, -height/2, length/2);
+
+    // Front face
+    glNormal3d(0, 0, 1);
+    glVertex3d(-width/2, -height/2, length/2);
+    glVertex3d(width/2, -height/2, length/2);
+    glVertex3d(width/2, height/2, length/2);
+    glVertex3d(-width/2, height/2, length/2);
+
+    // Back face
+    glNormal3d(0, 0, -1);
+    glVertex3d(-width/2, -height/2, -length/2);
+    glVertex3d(width/2, -height/2, -length/2);
+    glVertex3d(width/2, height/2, -length/2);
+    glVertex3d(-width/2, height/2, -length/2);
+
+    // Left face
+    glNormal3d(-1, 0, 0);
+    glVertex3d(-width/2, -height/2, -length/2);
+    glVertex3d(-width/2, -height/2, length/2);
+    glVertex3d(-width/2, height/2, length/2);
+    glVertex3d(-width/2, height/2, -length/2);
+
+    // Right face
+    glNormal3d(1, 0, 0);
+    glVertex3d(width/2, -height/2, -length/2);
+    glVertex3d(width/2, -height/2, length/2);
+    glVertex3d(width/2, height/2, length/2);
+    glVertex3d(width/2, height/2, -length/2);
+
+    glEnd();
+
+    glPopMatrix();
+}
+
+
+
+void drawTriangle(const Vector3& position, double size, const double r, const double g, const double b, const double alpha) {
+    glPushMatrix();
+    glTranslated(position.x, position.y, position.z);
+
+    glColor4d(r, g, b, alpha);
+
+    // Calculate vertices of equilateral triangle
+    const double height = size * std::sqrt(3) / 2;
+    const double halfSize = size / 2;
+    const double depth = size / 4; // Depth of the triangular prism
+
+    // Define vertices
+    const double vertices[6][3] = {
+        {-halfSize, -height/3, -depth/2},
+        {halfSize, -height/3, -depth/2},
+        {0, 2*height/3, -depth/2},
+        {-halfSize, -height/3, depth/2},
+        {halfSize, -height/3, depth/2},
+        {0, 2*height/3, depth/2}
+    };
+
+    // Draw the triangular prism
+    glBegin(GL_TRIANGLES);
+
+    // Front face
+    glNormal3d(0, 0, 1);
+    glVertex3dv(vertices[3]);
+    glVertex3dv(vertices[4]);
+    glVertex3dv(vertices[5]);
+
+    // Back face
+    glNormal3d(0, 0, -1);
+    glVertex3dv(vertices[0]);
+    glVertex3dv(vertices[2]);
+    glVertex3dv(vertices[1]);
+
+    glEnd();
+
+    glBegin(GL_QUADS);
+
+    // Bottom face
+    glNormal3d(0, -1, 0);
+    glVertex3dv(vertices[0]);
+    glVertex3dv(vertices[1]);
+    glVertex3dv(vertices[4]);
+    glVertex3dv(vertices[3]);
+
+    // Left face
+    glNormal3d(-std::sqrt(3)/2, 0.5, 0);
+    glVertex3dv(vertices[0]);
+    glVertex3dv(vertices[3]);
+    glVertex3dv(vertices[5]);
+    glVertex3dv(vertices[2]);
+
+    // Right face
+    glNormal3d(std::sqrt(3)/2, 0.5, 0);
+    glVertex3dv(vertices[1]);
+    glVertex3dv(vertices[2]);
+    glVertex3dv(vertices[5]);
+    glVertex3dv(vertices[4]);
+
     glEnd();
 
     glPopMatrix();

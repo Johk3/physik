@@ -282,59 +282,90 @@ void updateObjectTrail(Object& obj) {
     }
 }
 
-// Check if two circular objects are overlapping
+// Helper function to get the bounding sphere of an object
+std::pair<Vector3, double> getBoundingSphere(const Object& obj) {
+    Vector3 center = obj.position;
+    double radius = obj.radius;
+
+    switch(obj.shape) {
+        case ObjectShape::SPHERE:
+                break;
+        case ObjectShape::TRIANGLE: {
+            double height = obj.radius * std::sqrt(3) / 2;
+            double depth = obj.radius / 4;
+            center.y += height / 3;
+            radius = std::sqrt(std::pow(2*height/3, 2) + std::pow(obj.radius/2, 2) + std::pow(depth/2, 2));
+            break;
+        }
+        case ObjectShape::FLAT_SURFACE:
+                    center.y += obj.radius / 4;
+        // Radius is half the diagonal of the prism
+        radius = std::sqrt(std::pow(obj.radius * 2, 2) + std::pow(obj.radius * 2, 2) + std::pow(obj.radius, 2)) / 2;
+        break;
+        case ObjectShape::CONTAINER:
+                center.y += obj.radius;
+        radius = std::sqrt(3) * obj.radius;
+        break;
+        case ObjectShape::COW:
+            // Increase the radius to encompass the cow shape
+                radius *= 2;
+        break;
+    }
+
+    return {center, radius};
+}
+
+// Check if two objects are overlapping using their bounding spheres
 bool checkCollision(const Object& obj1, const Object& obj2) {
-    const double distance = (obj1.position - obj2.position).length();
-    return distance <= (obj1.radius + obj2.radius);
+    auto [center1, radius1] = getBoundingSphere(obj1);
+    auto [center2, radius2] = getBoundingSphere(obj2);
+
+    const double distance = (center1 - center2).length();
+    return distance <= (radius1 + radius2);
 }
 
 void handleCollision(Object& obj1, Object& obj2) {
+    auto [center1, radius1] = getBoundingSphere(obj1);
+    auto [center2, radius2] = getBoundingSphere(obj2);
+
     // Calculate vector from obj1 to obj2
-    const Vector3 delta = obj2.position - obj1.position;
+    Vector3 delta = center2 - center1;
     const float distance = delta.length();
 
-    // Normalize the delta vector
-    const Vector3 normal = delta.normal();
+    // Calculate overlap
+    const float overlap = (radius1 + radius2) - distance;
 
-    // Calculate relative velocity
-    const Vector3 relativeVelocity = obj2.velocity - obj1.velocity;
-
-    // Calculate relative velocity along the normal using dot product
-    float velocityAlongNormal = relativeVelocity.dot(normal);
-
-    // Do not resolve if velocities are separating
-    if (velocityAlongNormal > 0)
-        return;
-
-    // Calculate impulse scalar
-    float impulseScalar = - (1 + Settings::g_bounceFactor) * velocityAlongNormal;
-    impulseScalar /= 1 / obj1.mass  +  1 / obj2.mass;
-
-    // Apply impulse
-    Vector3 impulse = normal * impulseScalar;
-
-    // Update velocities
-    obj1.velocity.x -= impulse.x / obj1.mass;
-    obj1.velocity.y -= impulse.y / obj1.mass;
-    obj1.velocity.z -= impulse.z / obj1.mass;
-
-    obj2.velocity.x += impulse.x / obj2.mass;
-    obj2.velocity.y += impulse.y / obj2.mass;
-    obj2.velocity.z += impulse.z / obj2.mass;
-
-
-    // Separate the objects to prevent overlapping
-    const float overlap = (obj1.radius + obj2.radius) - distance;
     if (overlap > 0) {
-        Vector3 separationVector = normal * overlap;
+        // Normalize the delta vector
+        const Vector3 normal = delta.normal();
 
-        obj1.position.x -= separationVector.x * obj2.mass/(obj1.mass + obj2.mass);
-        obj1.position.y -= separationVector.y * obj2.mass/(obj1.mass + obj2.mass);
-        obj1.position.z -= separationVector.z * obj2.mass/(obj1.mass + obj2.mass);
+        // Separate the objects
+        float mass_ratio1 = obj2.mass / (obj1.mass + obj2.mass);
+        float mass_ratio2 = obj1.mass / (obj1.mass + obj2.mass);
 
-        obj2.position.x += separationVector.x * obj1.mass/(obj1.mass + obj2.mass);
-        obj2.position.y += separationVector.y * obj1.mass/(obj1.mass + obj2.mass);
-        obj2.position.z += separationVector.z * obj1.mass/(obj1.mass + obj2.mass);
+        obj1.position = obj1.position - normal * (overlap * mass_ratio1);
+        obj2.position = obj2.position + normal * (overlap * mass_ratio2);
+
+        // Calculate relative velocity
+        const Vector3 relativeVelocity = obj2.velocity - obj1.velocity;
+
+        // Calculate relative velocity along the normal
+        float velocityAlongNormal = relativeVelocity.dot(normal);
+
+        // Do not resolve if velocities are separating
+        if (velocityAlongNormal > 0)
+            return;
+
+        // Calculate impulse scalar
+        float impulseScalar = -(1 + Settings::g_bounceFactor) * velocityAlongNormal;
+        impulseScalar /= 1 / obj1.mass + 1 / obj2.mass;
+
+        // Apply impulse
+        Vector3 impulse = normal * impulseScalar;
+
+        // Update velocities
+        obj1.velocity = obj1.velocity - impulse * (1 / obj1.mass);
+        obj2.velocity = obj2.velocity + impulse * (1 / obj2.mass);
     }
 }
 
@@ -413,26 +444,13 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
 
 std::vector<Object> get_objects() {
     std::vector<Object> allObjects;
-
-    // Create and add objects in 3D space
-    for (int i = 0; i < 10; i++) {
-        for (int j = 0; j < 10; j++) {
-            for (int k = 0; k < 10; k++) {
-                const float r = float(i) / 9.0f;
-                const float g = float(j) / 9.0f;
-                const float b = float(k) / 9.0f;
-
-                allObjects.emplace_back(Vector3{-0.5f + i * 0.1f, -0.5f + j * 0.1f, -0.5f + k * 0.1f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, r, g, b, ObjectShape::SPHERE);
-            }
-        }
-    }
-    allObjects.emplace_back(Vector3{0.02, -0.5f, 0.0f}, Vector3{0.0f, 0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0, ObjectShape::SPHERE);
+    allObjects.emplace_back(Vector3{0.0, 0.0, 0.0}, Vector3{0.0f, 0.0f, 0.0f}, 5e11, 5e1, 1.0, 1.0, 1.0, ObjectShape::SPHERE);
 
     // Add examples of new shapes
-    allObjects.emplace_back(Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 1.0, 0.0, 0.0, ObjectShape::TRIANGLE);
-    allObjects.emplace_back(Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 0.0, 1.0, 0.0, ObjectShape::FLAT_SURFACE);
-    allObjects.emplace_back(Vector3{0.5f, -0.5f, -0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 0.0, 0.0, 1.0, ObjectShape::CONTAINER);
-    allObjects.emplace_back(Vector3{-0.5f, 0.5f, -0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 1.0, 1.0, 0.0, ObjectShape::COW);
+    allObjects.emplace_back(Vector3{0.5f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 1.0, 0.0, 0.0, ObjectShape::TRIANGLE);
+    allObjects.emplace_back(Vector3{-0.5f, -0.0f, 0.0f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 0.0, 1.0, 0.0, ObjectShape::FLAT_SURFACE);
+    allObjects.emplace_back(Vector3{0.0f, -0.5f, -0.5f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 0.0, 0.0, 1.0, ObjectShape::CONTAINER);
+    allObjects.emplace_back(Vector3{-0.0f, -0.5f, -0.0f}, Vector3{0.0f, 0.0f, 0.0f}, 1e3, 0.00001, 1.0, 1.0, 0.0, ObjectShape::COW);
 
     return allObjects;
 }
