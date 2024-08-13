@@ -52,6 +52,9 @@ int main() {
     // Make the simulation window's context current
     glfwMakeContextCurrent(simulationWindow);
 
+    // Set up input callbacks for the simulation window
+    setup_input_callbacks(simulationWindow);
+
     // Initialize settings
     Settings::initialize();
 
@@ -64,6 +67,9 @@ int main() {
 
     // Main loop
     while (!glfwWindowShouldClose(simulationWindow) && !glfwWindowShouldClose(controlWindow)) {
+        // Process input for camera movement
+        process_input(simulationWindow);
+
         if (Settings::g_simulate) {
             updateSimulation(allObjects, grid, pool, 1.0 / Settings::g_refreshRate);
 
