@@ -21,8 +21,8 @@ and 3D physics in the 3d branch.
 </table>
 
 ## View Controls
-WASD or Left click(hold) - Move the camera
-Mouse wheel scroll - Zoom
+- WASD or Left click(hold) - Move the camera
+- Mouse wheel scroll - Zoom
 
 ## Dependencies
 
