@@ -5,8 +5,9 @@
 #include "spatialgrid.h"
 #include "ThreadPool.h"
 #include <vector>
+#ifdef USE_GPU
 #include <CL/cl2.hpp>
-
+#endif
 // Simulation-related functions
 void updateObjectTrail(Object& obj);
 bool checkCollision(const Object& obj1, const Object& obj2);
@@ -22,7 +23,7 @@ void calculate_gravity_normal(Object& object1, const std::vector<Object>& object
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time);
 
 std::vector<Object> get_objects();
-
+#ifdef USE_GPU
 // OpenCL related functions
 void initializeOpenCL();
 void cleanupOpenCL();
@@ -34,6 +35,6 @@ extern cl::Kernel gravityKernel;
 extern cl::Kernel updatePositionKernel;
 extern cl::Kernel collisionKernel;
 extern cl::Program program;
-
+#endif
 
 #endif // SIMULATION_UTILS_H

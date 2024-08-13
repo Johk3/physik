@@ -5,9 +5,9 @@
 #include <immintrin.h>
 #endif
 #include <fstream>
+#ifdef USE_GPU
 #include <CL/cl2.hpp>
 #include <stdexcept>
-
 // OpenCL global variables
 cl::Context context;
 cl::CommandQueue queue;
@@ -15,6 +15,7 @@ cl::Kernel gravityKernel;
 cl::Kernel updatePositionsKernel;
 cl::Kernel collisionKernel;
 cl::Program program;
+#endif
 
 #ifdef USE_AVX2
 // Helper function to sum up a __m256d vector
@@ -200,6 +201,8 @@ std::string readKernelSource(const char* filename) {
     return std::string(std::istreambuf_iterator<char>(file),
                        std::istreambuf_iterator<char>());
 }
+
+#ifdef USE_GPU
 // Helper function to check OpenCL errors
 void checkError(cl_int error, const std::string& message) {
     if (error != CL_SUCCESS) {
@@ -401,10 +404,12 @@ __kernel void resolveCollisions(
         exit(1);
     }
 }
+#endif
 
 
 
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
+    #ifdef USE_GPU
     try {
         size_t numObjects = allObjects.size();
         const float worldSize = 2.0f; // Total size is still 2, but ranges from -1 to 1
@@ -477,6 +482,75 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
     } catch (const std::exception& e) {
         std::cerr << "Error in updateSimulation: " << e.what() << std::endl;
     }
+#else
+    // CPU-based simulation update
+    const size_t numObjects = allObjects.size();
+    const size_t numThreads = pool.getThreadCount();
+    const size_t batchSize = std::max(size_t(1), numObjects / (numThreads * 4));
+
+    // Step 1: Gravity Calculation
+    std::vector<std::future<void>> gravityfutures;
+    for (size_t i = 0; i < numObjects; i += batchSize) {
+        size_t end = std::min(i + batchSize, numObjects);
+        gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
+            for (size_t j = i; j < end; ++j) {
+                calculate_gravity(allObjects[j], allObjects, 0, allObjects.size());
+            }
+        }));
+    }
+
+    // Wait for gravity calculations to complete
+    for (auto& future : gravityfutures) {
+        future.get();
+    }
+
+    // Step 2: Update positions and trails
+    std::vector<std::future<void>> updateFutures;
+    for (size_t i = 0; i < numObjects; i += batchSize) {
+        size_t end = std::min(i + batchSize, numObjects);
+        updateFutures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
+            for (size_t j = i; j < end; ++j) {
+                Object& obj = allObjects[j];
+                obj.velocity = obj.velocity + obj.acceleration * delta_time;
+                obj.position = obj.position + obj.velocity * delta_time;
+                updateObjectTrail(obj);
+            }
+        }));
+    }
+
+    // Wait for position updates to complete
+    for (auto& future : updateFutures) {
+        future.get();
+    }
+
+    // Step 3: Rebuild spatial grid
+    grid.clear();
+    for (auto& obj : allObjects) {
+        grid.insert(&obj);
+    }
+
+    // Step 4: Handle collisions
+    std::vector<std::future<void>> collisionFutures;
+    for (size_t i = 0; i < numObjects; i += batchSize) {
+        size_t end = std::min(i + batchSize, numObjects);
+        collisionFutures.push_back(pool.enqueue([&allObjects, &grid, i, end]() {
+            for (size_t j = i; j < end; ++j) {
+                auto neighbors = grid.getNeighbors(allObjects[j]);
+                for (auto* neighbor : neighbors) {
+                    if (checkCollision(allObjects[j], *neighbor)) {
+                        handleCollision(allObjects[j], *neighbor);
+                    }
+                }
+            }
+        }));
+    }
+
+    // Wait for collision handling to complete
+    for (auto& future : collisionFutures) {
+        future.get();
+    }
+#endif
+
 }
 
 
