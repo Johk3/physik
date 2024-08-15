@@ -14,17 +14,19 @@
 // Constants
 const int WINDOW_WIDTH = 1280;
 const int WINDOW_HEIGHT = 720;
-const float SPHERE_RADIUS = 0.02f;
+const float SPHERE_RADIUS = 0.05f;
 const float WORLD_RADIUS = 1.0f;
 const float GRAVITY = -9.81f;
 const int MAX_PARTICLES = 100000;
 const int GRID_SIZE = 10;
 const float TIME_STEP = 0.016f; // 60 FPS
-const float SPAWN_INTERVAL = 1.0f; // Spawn a new particle every 0.1 seconds
+const float SPAWN_INTERVAL = 0.1f; // Spawn a new particle every 0.1 seconds
+const int SPAWN_COUNT = 1;
+const float SPAWN_VERTICAL_OFFSET = 0.1f; // Vertical distance between spawned objects
 
 
 // Camera constants
-const float CAMERA_INITIAL_DISTANCE = 3.0f;
+const float CAMERA_INITIAL_DISTANCE = 5.0f;
 const float CAMERA_MIN_DISTANCE = 1.5f;
 const float CAMERA_MAX_DISTANCE = 10.0f;
 const float CAMERA_ROTATION_SPEED = 0.005f;
@@ -58,8 +60,6 @@ std::vector<Particle> particles(MAX_PARTICLES);
 int activeParticles = 0;
 float timeSinceLastSpawn = 0.0f;
 float lastFrameTime = 0.0f;
-const int SPAWN_COUNT = 5;
-const float SPAWN_VERTICAL_OFFSET = 0.1f; // Vertical distance between spawned objects
 bool gravityEnabled = true;
 
 float fps = 0.0f;
@@ -103,15 +103,23 @@ const char* vertexShaderSource = R"(
     uniform mat4 model;
     uniform mat4 view;
     uniform mat4 projection;
+    uniform float pointSize;
     void main() {
-        gl_Position = projection * view * model * vec4(aPos, 1.0);
+        vec4 viewPos = view * model * vec4(aPos, 1.0);
+        gl_Position = projection * viewPos;
+        gl_PointSize = pointSize / -viewPos.z;
     }
 )";
 
+// Update the fragment shader source
 const char* fragmentShaderSource = R"(
     #version 330 core
     out vec4 FragColor;
     void main() {
+        vec2 circCoord = 2.0 * gl_PointCoord - 1.0;
+        if (dot(circCoord, circCoord) > 1.0) {
+            discard;
+        }
         FragColor = vec4(0.5, 0.8, 1.0, 1.0);
     }
 )";
@@ -250,6 +258,9 @@ void initOpenGL() {
 
     glEnable(GL_DEPTH_TEST);
     glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    // Set the clear color to grey
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 }
 
 void initShaders() {
@@ -316,7 +327,7 @@ void spawnParticles() {
                 (i - (SPAWN_COUNT - 1) / 2.0f) * SPAWN_VERTICAL_OFFSET,
                 dis(gen) * WORLD_RADIUS
             );
-            glm::vec3 initialVelocity(5.0f + dis(gen), dis(gen), dis(gen)); // Shoot towards the right
+            glm::vec3 initialVelocity(1.0f + dis(gen), dis(gen), dis(gen)); // Shoot towards the right
 
             particles[activeParticles].position = spawnPosition;
             particles[activeParticles].oldPosition = spawnPosition - initialVelocity * TIME_STEP;
@@ -386,15 +397,23 @@ void renderParticles() {
 
     glBufferSubData(GL_ARRAY_BUFFER, 0, positions.size() * sizeof(glm::vec3), positions.data());
 
+    glEnable(GL_PROGRAM_POINT_SIZE);
+    glEnable(GL_POINT_SPRITE);
+
     for (int i = 0; i < activeParticles; ++i) {
         if (particles[i].active) {
             glm::mat4 model = glm::translate(glm::mat4(1.0f), particles[i].position);
-            model = glm::scale(model, glm::vec3(particles[i].radius)); // Use the particle's radius for scaling
-
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+            float pointSize = particles[i].radius *1000.0f;
+            glUniform1f(glGetUniformLocation(shaderProgram, "pointSize"), pointSize);
+
             glDrawArrays(GL_POINTS, i, 1);
         }
     }
+
+    glDisable(GL_POINT_SPRITE);
+    glDisable(GL_PROGRAM_POINT_SIZE);
 
     glBindVertexArray(0);
 }
