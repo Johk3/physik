@@ -8,6 +8,9 @@ find_package(glfw3 REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
 
+# Add GLM as a subdirectory
+add_subdirectory(glm)
+
 # Check AVX Support
 include(CheckCXXSourceRuns)
 include(CheckCXXCompilerFlag)
@@ -38,26 +41,26 @@ set(IMGUI_SOURCES
 
 # Define header and source files
 set(HEADERS
-        include/object.h
-        include/vector2.h
-        include/spatialgrid.h
-        include/rendering.h
-        include/controlpanel.h
-        include/simulationutils.h
-        include/settings.h
-        include/ThreadPool.h
-        include/constants.h
-        include/linmath.h
+        #include/object.h
+        #include/vector2.h
+        #include/spatialgrid.h
+        #include/rendering.h
+        #include/controlpanel.h
+        #include/simulationutils.h
+        #include/settings.h
+        #include/ThreadPool.h
+        #include/constants.h
+        #include/linmath.h
 )
 
 set(SOURCES
         main.cpp
-        src/object.cpp
-        src/rendering.cpp
-        src/simulationutils.cpp
-        src/controlpanel.cpp
-        src/spatialgrid.cpp
-        src/settings.cpp
+        #src/object.cpp
+        #src/rendering.cpp
+        #src/simulationutils.cpp
+        #src/controlpanel.cpp
+        #src/spatialgrid.cpp
+        #src/settings.cpp
 )
 
 # Add executable
@@ -71,6 +74,7 @@ add_executable(physik
 target_include_directories(physik PRIVATE
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
+        ${CMAKE_CURRENT_SOURCE_DIR}/glm
 )
 
 # Link libraries
@@ -79,6 +83,7 @@ target_link_libraries(physik
         glfw
         GLEW::GLEW
         glad::glad
+        glm
 )
 
 # AVX2 support detection

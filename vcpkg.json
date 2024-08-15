@@ -32,5 +32,8 @@
   }, {
     "name" : "imgui",
     "version>=" : "1.90.7"
+  }, {
+    "name" : "glm",
+    "version>=" : "1.0.1#3"
   } ]
 }
