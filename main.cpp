@@ -60,6 +60,7 @@ float timeSinceLastSpawn = 0.0f;
 float lastFrameTime = 0.0f;
 const int SPAWN_COUNT = 5;
 const float SPAWN_VERTICAL_OFFSET = 0.01f; // Vertical distance between spawned objects
+bool gravityEnabled = true;
 
 float fps = 0.0f;
 float fpsUpdateInterval = 0.5f;  // Update FPS every 0.5 seconds
@@ -72,6 +73,9 @@ GLuint shaderProgram;
 
 Camera camera;
 bool leftMousePressed = false;
+bool mouseOverButton = false;
+ImVec2 buttonPos;
+ImVec2 buttonSize;
 double lastMouseX, lastMouseY;
 
 // Function declarations
@@ -116,10 +120,13 @@ void initImGui(GLFWwindow* window) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 }
+
 
 void cleanupImGui() {
     ImGui_ImplOpenGL3_Shutdown();
@@ -139,21 +146,27 @@ void updateFPS(float deltaTime) {
 }
 
 void renderImGui() {
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    // Create a window for the FPS and object count
     ImGui::SetNextWindowPos(ImVec2(10, 10));
-    ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
-    ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::SetNextWindowBgAlpha(0.35f);
+    ImGui::Begin("Stats and Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+
     ImGui::Text("FPS: %.1f", fps);
     ImGui::Text("Objects: %d", activeParticles);
-    ImGui::End();
 
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    // Store button position and size for hit testing
+    buttonPos = ImGui::GetCursorScreenPos();
+    if (ImGui::Button(gravityEnabled ? "Gravity: ON" : "Gravity: OFF")) {
+        gravityEnabled = !gravityEnabled;
+    }
+    buttonSize = ImGui::GetItemRectSize();
+
+    ImGui::Text("Left-click & drag to rotate camera");
+    ImGui::Text("Scroll to zoom");
+
+    ImGui::End();
 }
+
+
 
 int main() {
     initOpenGL();
@@ -178,6 +191,13 @@ int main() {
         float deltaTime = currentTime - lastFrameTime;
         lastFrameTime = currentTime;
 
+        glfwPollEvents();
+
+        // Start the ImGui frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
         updateFPS(deltaTime);
 
         timeSinceLastSpawn += deltaTime;
@@ -190,14 +210,16 @@ int main() {
         updateGrid();
         handleCollisions();
 
-        // Clear the screen
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderParticles();
-        renderImGui();  // Render ImGui
+        renderImGui();
+
+        // Render ImGui
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
-        glfwPollEvents();
     }
 
     cleanupImGui();  // Cleanup ImGui
@@ -298,7 +320,7 @@ void spawnParticles() {
 
             particles[activeParticles].position = spawnPosition;
             particles[activeParticles].oldPosition = spawnPosition - initialVelocity * TIME_STEP;
-            particles[activeParticles].acceleration = glm::vec3(0.0f, GRAVITY, 0.0f);
+            particles[activeParticles].acceleration = gravityEnabled ? glm::vec3(0.0f, GRAVITY, 0.0f) : glm::vec3(0.0f);
             particles[activeParticles].radius = SPHERE_RADIUS;
             particles[activeParticles].active = true;
 
@@ -324,6 +346,13 @@ void updateActiveParticles() {
                     glm::vec3 temp = p.position;
                     p.position += p.position - p.oldPosition + p.acceleration * TIME_STEP * TIME_STEP;
                     p.oldPosition = temp;
+
+                    // Apply gravity only if it's enabled
+                    if (gravityEnabled) {
+                        p.acceleration = glm::vec3(0.0f, GRAVITY, 0.0f);
+                    } else {
+                        p.acceleration = glm::vec3(0.0f, 0.0f, 0.0f);
+                    }
 
                     applyConstraints(p);
                 }
@@ -442,11 +471,23 @@ void addToGrid(int particleIndex, const glm::ivec3& gridCoords) {
     grid[gridCoords.x][gridCoords.y][gridCoords.z].particleIndices.push_back(particleIndex);
 }
 
+bool isMouseOverButton(double xpos, double ypos) {
+    return (xpos >= buttonPos.x && xpos <= buttonPos.x + buttonSize.x &&
+            ypos >= buttonPos.y && ypos <= buttonPos.y + buttonSize.y);
+}
+
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
-            leftMousePressed = true;
-            glfwGetCursorPos(window, &lastMouseX, &lastMouseY);
+            double xpos, ypos;
+            glfwGetCursorPos(window, &xpos, &ypos);
+            if (!mouseOverButton) {
+                leftMousePressed = true;
+                lastMouseX = xpos;
+                lastMouseY = ypos;
+            } else if (mouseOverButton) {
+                gravityEnabled = !gravityEnabled;  // Toggle gravity when clicking the button
+            }
         } else if (action == GLFW_RELEASE) {
             leftMousePressed = false;
         }
@@ -454,14 +495,15 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 }
 
 void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
-    if (leftMousePressed) {
+    mouseOverButton = isMouseOverButton(xpos, ypos);
+
+    if (leftMousePressed && !mouseOverButton) {
         double deltaX = xpos - lastMouseX;
         double deltaY = ypos - lastMouseY;
 
         camera.theta -= CAMERA_ROTATION_SPEED * deltaX;
         camera.phi -= CAMERA_ROTATION_SPEED * deltaY;
 
-        // Clamp phi to avoid gimbal lock
         camera.phi = glm::clamp(camera.phi, 0.1f, glm::pi<float>() - 0.1f);
 
         lastMouseX = xpos;
@@ -470,6 +512,11 @@ void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
 }
 
 void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.WantCaptureMouse) {
+        return;  // Let ImGui handle this event
+    }
+
     camera.distance -= CAMERA_ZOOM_SPEED * yoffset;
     camera.distance = glm::clamp(camera.distance, CAMERA_MIN_DISTANCE, CAMERA_MAX_DISTANCE);
 }
