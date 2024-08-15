@@ -20,7 +20,7 @@ const float GRAVITY = -9.81f;
 const int MAX_PARTICLES = 100000;
 const int GRID_SIZE = 10;
 const float TIME_STEP = 0.016f; // 60 FPS
-const float SPAWN_INTERVAL = 0.01f; // Spawn a new particle every 0.1 seconds
+const float SPAWN_INTERVAL = 1.0f; // Spawn a new particle every 0.1 seconds
 
 
 // Camera constants
@@ -59,7 +59,7 @@ int activeParticles = 0;
 float timeSinceLastSpawn = 0.0f;
 float lastFrameTime = 0.0f;
 const int SPAWN_COUNT = 5;
-const float SPAWN_VERTICAL_OFFSET = 0.01f; // Vertical distance between spawned objects
+const float SPAWN_VERTICAL_OFFSET = 0.1f; // Vertical distance between spawned objects
 bool gravityEnabled = true;
 
 float fps = 0.0f;
@@ -389,7 +389,7 @@ void renderParticles() {
     for (int i = 0; i < activeParticles; ++i) {
         if (particles[i].active) {
             glm::mat4 model = glm::translate(glm::mat4(1.0f), particles[i].position);
-            model = glm::scale(model, glm::vec3(SPHERE_RADIUS));
+            model = glm::scale(model, glm::vec3(particles[i].radius)); // Use the particle's radius for scaling
 
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
             glDrawArrays(GL_POINTS, i, 1);
@@ -398,7 +398,6 @@ void renderParticles() {
 
     glBindVertexArray(0);
 }
-
 
 void applyConstraints(Particle& p) {
     glm::vec3 toCenter = p.position;
