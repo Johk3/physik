@@ -10,6 +10,9 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <iomanip>
+#include <ios>
+#include <iostream>
 
 // Constants
 const int WINDOW_WIDTH = 1280;
@@ -23,7 +26,7 @@ const float TIME_STEP = 0.016f; // 60 FPS
 const float SPAWN_INTERVAL = 0.1f; // Spawn a new particle every 0.1 seconds
 const int SPAWN_COUNT = 1;
 const float SPAWN_VERTICAL_OFFSET = 0.1f; // Vertical distance between spawned objects
-
+const float PARTICLE_MASS = 0.1f; // Mass of each particle in kg
 
 // Camera constants
 const float CAMERA_INITIAL_DISTANCE = 5.0f;
@@ -61,6 +64,12 @@ int activeParticles = 0;
 float timeSinceLastSpawn = 0.0f;
 float lastFrameTime = 0.0f;
 bool gravityEnabled = true;
+float totalEnergy = 0.0f;
+float initialTotalEnergy = 0.0f;
+float kineticEnergy = 0.0f;
+float potentialEnergy = 0.0f;
+float maxEnergy = 1000.0f; // Initial max energy, will be updated dynamically
+float energyDifference = 0.0f;
 
 float fps = 0.0f;
 float fpsUpdateInterval = 0.5f;  // Update FPS every 0.5 seconds
@@ -95,6 +104,9 @@ void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
 void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 glm::mat4 getViewMatrix();
 void updateActiveParticles();
+void calculateEnergy();
+std::string formatEnergy(float energy);
+float calculateParticleEnergy(const Particle& p);
 
 // Shader source code
 const char* vertexShaderSource = R"(
@@ -161,6 +173,43 @@ void renderImGui() {
     ImGui::Text("FPS: %.1f", fps);
     ImGui::Text("Objects: %d", activeParticles);
 
+    // Energy bars
+    float barWidth = 200.0f;
+    float barHeight = 20.0f;
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+
+    // Total Energy
+    ImGui::Text("Total Energy:");
+    float totalEnergyNormalized = std::min(totalEnergy / maxEnergy, 1.0f);
+    ImGui::ProgressBar(totalEnergyNormalized, ImVec2(barWidth, barHeight));
+    ImGui::SameLine();
+    ImGui::Text("%s", formatEnergy(totalEnergy).c_str());
+
+    // Kinetic Energy
+    ImGui::Text("Kinetic Energy:");
+    float kineticEnergyNormalized = std::min(kineticEnergy / maxEnergy, 1.0f);
+    ImGui::ProgressBar(kineticEnergyNormalized, ImVec2(barWidth, barHeight));
+    ImGui::SameLine();
+    ImGui::Text("%s", formatEnergy(kineticEnergy).c_str());
+
+    // Potential Energy
+    ImGui::Text("Potential Energy:");
+    float potentialEnergyNormalized = std::min(potentialEnergy / maxEnergy, 1.0f);
+    ImGui::ProgressBar(potentialEnergyNormalized, ImVec2(barWidth, barHeight));
+    ImGui::SameLine();
+    ImGui::Text("%s", formatEnergy(potentialEnergy).c_str());
+
+    // Initial Total Energy
+    ImGui::Text("Initial Total Energy: %s", formatEnergy(initialTotalEnergy).c_str());
+    ImGui::Text("Max. allocated energy for system: %s", formatEnergy(maxEnergy).c_str());
+    // Energy Conservation
+    ImGui::Text("Energy Difference: %s", formatEnergy(energyDifference).c_str());
+    if (std::abs(energyDifference) > 0.01f * initialTotalEnergy) {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Warning: Energy not conserved!");
+    } else {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Energy conserved within tolerance.");
+    }
+
     // Store button position and size for hit testing
     buttonPos = ImGui::GetCursorScreenPos();
     if (ImGui::Button(gravityEnabled ? "Gravity: ON" : "Gravity: OFF")) {
@@ -217,6 +266,7 @@ int main() {
         updateActiveParticles();
         updateGrid();
         handleCollisions();
+        calculateEnergy(); // Calculate energy after updating particles
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -335,9 +385,25 @@ void spawnParticles() {
             particles[activeParticles].radius = SPHERE_RADIUS;
             particles[activeParticles].active = true;
 
+            // Calculate and add the energy of the new particle
+            float newParticleEnergy = calculateParticleEnergy(particles[activeParticles]);
+            initialTotalEnergy += newParticleEnergy;
+
+            // Update maxEnergy if necessary
+            if (initialTotalEnergy > maxEnergy) {
+                maxEnergy = initialTotalEnergy * 2.0f; // Add 200% buffer
+            }
+
             activeParticles++;
         }
     }
+}
+
+float calculateParticleEnergy(const Particle& p) {
+    glm::vec3 velocity = (p.position - p.oldPosition) / TIME_STEP;
+    float kinetic = 0.5f * PARTICLE_MASS * glm::dot(velocity, velocity);
+    float potential = PARTICLE_MASS * std::abs(GRAVITY) * (p.position.y + WORLD_RADIUS);
+    return kinetic + potential;
 }
 
 
@@ -448,6 +514,18 @@ void handleCollisions() {
                                 glm::vec3 n = collisionAxis / dist;
                                 float delta = 0.5f * (dist - p1.radius - p2.radius);
 
+                                // Calculate relative velocity
+                                glm::vec3 relativeVelocity = (p1.position - p1.oldPosition) - (p2.position - p2.oldPosition);
+
+                                // Calculate impulse
+                                float impulse = glm::dot(-(1.0f + 0.8f) * relativeVelocity, n) / (2.0f / PARTICLE_MASS);
+
+                                // Apply impulse (Newton's Third Law)
+                                glm::vec3 impulseVector = impulse * n;
+                                p1.oldPosition = p1.position - ((p1.position - p1.oldPosition) + impulseVector / PARTICLE_MASS);
+                                p2.oldPosition = p2.position - ((p2.position - p2.oldPosition) - impulseVector / PARTICLE_MASS);
+
+                                // Separate particles
                                 p1.position -= n * delta;
                                 p2.position += n * delta;
                             }
@@ -458,6 +536,44 @@ void handleCollisions() {
         }
     }
 }
+
+void calculateEnergy() {
+    kineticEnergy = 0.0f;
+    potentialEnergy = 0.0f;
+
+    for (int i = 0; i < activeParticles; ++i) {
+        if (particles[i].active) {
+            // Calculate velocity
+            glm::vec3 velocity = (particles[i].position - particles[i].oldPosition) / TIME_STEP;
+
+            // Kinetic energy: 1/2 * m * v^2
+            kineticEnergy += 0.5f * PARTICLE_MASS * glm::dot(velocity, velocity);
+
+            // Potential energy: m * g * h
+            potentialEnergy += PARTICLE_MASS * std::abs(GRAVITY) * (particles[i].position.y + WORLD_RADIUS);
+        }
+    }
+
+    totalEnergy = kineticEnergy + potentialEnergy;
+
+    // Check for energy conservation (allowing for small numerical errors)
+    energyDifference = std::abs(totalEnergy - initialTotalEnergy);
+}
+
+std::string formatEnergy(float energy) {
+    std::ostringstream oss;
+    oss << std::scientific << std::setprecision(3);
+
+    if (energy < 1e3) oss << energy << " J";
+    else if (energy < 1e6) oss << energy / 1e3 << " kJ";
+    else if (energy < 1e9) oss << energy / 1e6 << " MJ";
+    else if (energy < 1e12) oss << energy / 1e9 << " GJ";
+    else oss << energy / 1e12 << " TJ";
+
+    return oss.str();
+}
+
+
 
 void updateGrid() {
     for (auto& row : grid) {
