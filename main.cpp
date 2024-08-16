@@ -20,16 +20,16 @@ const int WINDOW_HEIGHT = 720;
 const float SPHERE_RADIUS = 0.05f;
 const float WORLD_RADIUS = 1.0f;
 const float GRAVITY = -9.81f;
-const int MAX_PARTICLES = 10;
+const int MAX_PARTICLES = 10000;
 const int GRID_SIZE = 10;
 const float TIME_STEP = 0.016f; // 60 FPS
-const float SPAWN_INTERVAL = 0.04f; // Spawn a new particle every 0.1 seconds
-const int SPAWN_COUNT = 1;
-const float SPAWN_VERTICAL_OFFSET = 0.1f; // Vertical distance between spawned objects
+const float SPAWN_INTERVAL = 0.001f; // Spawn a new particle every 0.1 seconds
+const int SPAWN_COUNT = 3;
+const float SPAWN_VERTICAL_OFFSET = 0.01f; // Vertical distance between spawned objects
 const float PARTICLE_MASS = 0.1f; // Mass of each particle in kg
 const float MIN_VELOCITY = 0.0f;
 const float MAX_VELOCITY = 10.0f;
-const float COEFFICIENT_OF_RESTITUTION = 0.98f;
+const float COEFFICIENT_OF_RESTITUTION = 0.90f;
 
 // Camera constants
 const float CAMERA_INITIAL_DISTANCE = 5.0f;
@@ -74,6 +74,10 @@ float kineticEnergy = 0.0f;
 float potentialEnergy = 0.0f;
 float maxEnergy = 100.0f; // Initial max energy, will be updated dynamically
 float energyDifference = 0.0f;
+glm::vec2 forceFieldPosition(0.0f, 0.0f);
+float forceFieldRadius = 200.0f;
+float forceFieldStrength = 20.0f;
+bool isForceFieldActive = false;
 
 float fps = 0.0f;
 float fpsUpdateInterval = 0.5f;  // Update FPS every 0.5 seconds
@@ -92,10 +96,9 @@ ImVec2 buttonSize;
 double lastMouseX, lastMouseY;
 
 // Function declarations
-void initOpenGL();
+void initOpenGL(); 
 void initShaders();
 void initParticles();
-void updateParticles();
 void renderParticles();
 void applyConstraints(Particle& p);
 void handleCollisions();
@@ -235,6 +238,59 @@ void renderImGui() {
     ImGui::End();
 }
 
+void renderForceField() {
+    if (!isForceFieldActive) return;
+
+    glUseProgram(shaderProgram);
+
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = getViewMatrix();
+    glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(forceFieldPosition.x, forceFieldPosition.y, 0.0f));
+    model = glm::scale(model, glm::vec3(forceFieldRadius));
+
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+    // Draw force field circle
+    const int segments = 64;
+    std::vector<glm::vec3> circleVertices;
+    for (int i = 0; i <= segments; ++i) {
+        float theta = 2.0f * glm::pi<float>() * float(i) / float(segments);
+        circleVertices.push_back(glm::vec3(cos(theta), sin(theta), 0.0f));
+    }
+
+    GLuint vbo, vao;
+    glGenBuffers(1, &vbo);
+    glGenVertexArrays(1, &vao);
+
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, circleVertices.size() * sizeof(glm::vec3), circleVertices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+
+    glDrawArrays(GL_LINE_LOOP, 0, segments);
+
+    glDeleteBuffers(1, &vbo);
+    glDeleteVertexArrays(1, &vao);
+}
+
+
+void renderScene() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    renderParticles();
+    renderForceField();
+    renderImGui();
+
+    // Render ImGui
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    glfwSwapBuffers(glfwGetCurrentContext());
+}
 
 
 int main() {
@@ -278,18 +334,9 @@ int main() {
         updateActiveParticles();
         updateGrid();
         handleCollisions();
-        calculateEnergy(); // Calculate energy after updating particles
+        calculateEnergy();
 
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        renderParticles();
-        renderImGui();
-
-        // Render ImGui
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        glfwSwapBuffers(window);
+        renderScene();
     }
 
     cleanupImGui();  // Cleanup ImGui
@@ -438,6 +485,19 @@ void updateActiveParticles() {
                     // Update position
                     glm::vec3 newPosition = p.position + p.velocity * TIME_STEP + 0.5f * p.acceleration * TIME_STEP * TIME_STEP;
 
+                    // Apply force field effect
+                    if (isForceFieldActive) {
+                        glm::vec2 particlePos2D(p.position.x, p.position.y);
+                        glm::vec2 forceDir = particlePos2D - forceFieldPosition;
+                        float distance = glm::length(forceDir);
+
+                        if (distance < forceFieldRadius) {
+                            float forceMagnitude = forceFieldStrength * (1.0f - distance / forceFieldRadius);
+                            glm::vec2 force = glm::normalize(forceDir) * forceMagnitude;
+                            p.velocity += glm::vec3(force.x, force.y, 0.0f) * TIME_STEP;
+                        }
+                    }
+
                     // Update velocity
                     p.velocity += p.acceleration * TIME_STEP;
 
@@ -464,6 +524,7 @@ void updateActiveParticles() {
         thread.join();
     }
 }
+
 
 void applyConstraints(Particle& p) {
     glm::vec3 toCenter = p.position;
@@ -622,6 +683,27 @@ std::string formatEnergy(float energy) {
     return oss.str();
 }
 
+void updateForceFieldPosition(double xpos, double ypos) {
+    int width, height;
+    glfwGetWindowSize(glfwGetCurrentContext(), &width, &height);
+
+    // Convert screen coordinates to world coordinates
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
+    glm::mat4 view = getViewMatrix();
+    glm::mat4 invVP = glm::inverse(projection * view);
+
+    glm::vec4 screenPos = glm::vec4(
+        (2.0f * xpos) / width - 1.0f,
+        1.0f - (2.0f * ypos) / height,
+        1.0f,
+        1.0f
+    );
+
+    glm::vec4 worldPos = invVP * screenPos;
+    worldPos /= worldPos.w;
+
+    forceFieldPosition = glm::vec2(worldPos.x, worldPos.y);
+}
 
 
 void updateGrid() {
@@ -671,8 +753,17 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             } else if (mouseOverButton) {
                 gravityEnabled = !gravityEnabled;  // Toggle gravity when clicking the button
             }
+        }else if (action == GLFW_RELEASE) {
+                leftMousePressed = false;
+            }
+        } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        if (action == GLFW_PRESS) {
+            isForceFieldActive = true;
+            double xpos, ypos;
+            glfwGetCursorPos(window, &xpos, &ypos);
+            updateForceFieldPosition(xpos, ypos);
         } else if (action == GLFW_RELEASE) {
-            leftMousePressed = false;
+            isForceFieldActive = false;
         }
     }
 }
@@ -691,6 +782,9 @@ void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
 
         lastMouseX = xpos;
         lastMouseY = ypos;
+    }
+    if (isForceFieldActive) {
+        updateForceFieldPosition(xpos, ypos);
     }
 }
 
