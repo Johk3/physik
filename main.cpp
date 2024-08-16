@@ -20,13 +20,16 @@ const int WINDOW_HEIGHT = 720;
 const float SPHERE_RADIUS = 0.05f;
 const float WORLD_RADIUS = 1.0f;
 const float GRAVITY = -9.81f;
-const int MAX_PARTICLES = 100000;
+const int MAX_PARTICLES = 10;
 const int GRID_SIZE = 10;
 const float TIME_STEP = 0.016f; // 60 FPS
-const float SPAWN_INTERVAL = 0.1f; // Spawn a new particle every 0.1 seconds
+const float SPAWN_INTERVAL = 0.04f; // Spawn a new particle every 0.1 seconds
 const int SPAWN_COUNT = 1;
 const float SPAWN_VERTICAL_OFFSET = 0.1f; // Vertical distance between spawned objects
 const float PARTICLE_MASS = 0.1f; // Mass of each particle in kg
+const float MIN_VELOCITY = 0.0f;
+const float MAX_VELOCITY = 10.0f;
+const float COEFFICIENT_OF_RESTITUTION = 0.98f;
 
 // Camera constants
 const float CAMERA_INITIAL_DISTANCE = 5.0f;
@@ -48,6 +51,7 @@ struct Particle {
     glm::vec3 position;
     glm::vec3 oldPosition;
     glm::vec3 acceleration;
+    glm::vec3 velocity;
     float radius;
     bool active;
 };
@@ -68,7 +72,7 @@ float totalEnergy = 0.0f;
 float initialTotalEnergy = 0.0f;
 float kineticEnergy = 0.0f;
 float potentialEnergy = 0.0f;
-float maxEnergy = 1000.0f; // Initial max energy, will be updated dynamically
+float maxEnergy = 100.0f; // Initial max energy, will be updated dynamically
 float energyDifference = 0.0f;
 
 float fps = 0.0f;
@@ -112,27 +116,35 @@ float calculateParticleEnergy(const Particle& p);
 const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
+    layout (location = 1) in float aVelocity;
     uniform mat4 model;
     uniform mat4 view;
     uniform mat4 projection;
     uniform float pointSize;
+    uniform float minVelocity;
+    uniform float maxVelocity;
+    out vec3 particleColor;
     void main() {
         vec4 viewPos = view * model * vec4(aPos, 1.0);
         gl_Position = projection * viewPos;
         gl_PointSize = pointSize / -viewPos.z;
+
+        // Calculate color based on velocity
+        float t = clamp((aVelocity - minVelocity) / (maxVelocity - minVelocity), 0.0, 1.0);
+        particleColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), t);
     }
 )";
 
-// Update the fragment shader source
 const char* fragmentShaderSource = R"(
     #version 330 core
+    in vec3 particleColor;
     out vec4 FragColor;
     void main() {
         vec2 circCoord = 2.0 * gl_PointCoord - 1.0;
         if (dot(circCoord, circCoord) > 1.0) {
             discard;
         }
-        FragColor = vec4(0.5, 0.8, 1.0, 1.0);
+        FragColor = vec4(particleColor, 1.0);
     }
 )";
 
@@ -335,10 +347,13 @@ void initShaders() {
 
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(glm::vec3), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * (sizeof(glm::vec3) + sizeof(float)), nullptr, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3) + sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(glm::vec3) + sizeof(float), (void*)(sizeof(glm::vec3)));
+    glEnableVertexAttribArray(1);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -377,7 +392,7 @@ void spawnParticles() {
                 (i - (SPAWN_COUNT - 1) / 2.0f) * SPAWN_VERTICAL_OFFSET,
                 dis(gen) * WORLD_RADIUS
             );
-            glm::vec3 initialVelocity(1.0f + dis(gen), dis(gen), dis(gen)); // Shoot towards the right
+            glm::vec3 initialVelocity(0.1f + dis(gen), dis(gen), dis(gen)); // Shoot towards the right
 
             particles[activeParticles].position = spawnPosition;
             particles[activeParticles].oldPosition = spawnPosition - initialVelocity * TIME_STEP;
@@ -420,9 +435,17 @@ void updateActiveParticles() {
             for (int j = start; j < end; ++j) {
                 Particle& p = particles[j];
                 if (p.active) {
-                    glm::vec3 temp = p.position;
-                    p.position += p.position - p.oldPosition + p.acceleration * TIME_STEP * TIME_STEP;
-                    p.oldPosition = temp;
+                    // Update position
+                    glm::vec3 newPosition = p.position + p.velocity * TIME_STEP + 0.5f * p.acceleration * TIME_STEP * TIME_STEP;
+
+                    // Update velocity
+                    p.velocity += p.acceleration * TIME_STEP;
+
+                    // Store old position
+                    p.oldPosition = p.position;
+
+                    // Update position
+                    p.position = newPosition;
 
                     // Apply gravity only if it's enabled
                     if (gravityEnabled) {
@@ -442,6 +465,26 @@ void updateActiveParticles() {
     }
 }
 
+void applyConstraints(Particle& p) {
+    glm::vec3 toCenter = p.position;
+    float dist = glm::length(toCenter);
+
+    if (dist > WORLD_RADIUS - p.radius) {
+        glm::vec3 n = glm::normalize(toCenter);
+        p.position = n * (WORLD_RADIUS - p.radius);
+
+        // Reflect velocity off the sphere surface
+        glm::vec3 reflectedVelocity = glm::reflect(p.velocity, n);
+
+        // Apply coefficient of restitution to the normal component of velocity
+        glm::vec3 normalVelocity = glm::dot(reflectedVelocity, n) * n;
+        glm::vec3 tangentialVelocity = reflectedVelocity - normalVelocity;
+        p.velocity = tangentialVelocity + COEFFICIENT_OF_RESTITUTION * normalVelocity;
+    }
+}
+
+
+
 void renderParticles() {
     glUseProgram(shaderProgram);
 
@@ -450,18 +493,23 @@ void renderParticles() {
 
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniform1f(glGetUniformLocation(shaderProgram, "minVelocity"), MIN_VELOCITY);
+    glUniform1f(glGetUniformLocation(shaderProgram, "maxVelocity"), MAX_VELOCITY);
 
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
-    std::vector<glm::vec3> positions;
+    std::vector<float> particleData;
     for (int i = 0; i < activeParticles; ++i) {
         if (particles[i].active) {
-            positions.push_back(particles[i].position);
+            particleData.push_back(particles[i].position.x);
+            particleData.push_back(particles[i].position.y);
+            particleData.push_back(particles[i].position.z);
+            particleData.push_back(glm::length(particles[i].velocity));
         }
     }
 
-    glBufferSubData(GL_ARRAY_BUFFER, 0, positions.size() * sizeof(glm::vec3), positions.data());
+    glBufferSubData(GL_ARRAY_BUFFER, 0, particleData.size() * sizeof(float), particleData.data());
 
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_POINT_SPRITE);
@@ -471,7 +519,7 @@ void renderParticles() {
             glm::mat4 model = glm::translate(glm::mat4(1.0f), particles[i].position);
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
 
-            float pointSize = particles[i].radius *1000.0f;
+            float pointSize = particles[i].radius * 1000.0f;
             glUniform1f(glGetUniformLocation(shaderProgram, "pointSize"), pointSize);
 
             glDrawArrays(GL_POINTS, i, 1);
@@ -482,16 +530,6 @@ void renderParticles() {
     glDisable(GL_PROGRAM_POINT_SIZE);
 
     glBindVertexArray(0);
-}
-
-void applyConstraints(Particle& p) {
-    glm::vec3 toCenter = p.position;
-    float dist = glm::length(toCenter);
-
-    if (dist > WORLD_RADIUS - p.radius) {
-        glm::vec3 n = toCenter / dist;
-        p.position = n * (WORLD_RADIUS - p.radius);
-    }
 }
 
 void handleCollisions() {
@@ -511,23 +549,36 @@ void handleCollisions() {
                             float dist = glm::length(collisionAxis);
 
                             if (dist < p1.radius + p2.radius) {
-                                glm::vec3 n = collisionAxis / dist;
-                                float delta = 0.5f * (dist - p1.radius - p2.radius);
+                                glm::vec3 collisionNormal = glm::normalize(collisionAxis);
 
                                 // Calculate relative velocity
-                                glm::vec3 relativeVelocity = (p1.position - p1.oldPosition) - (p2.position - p2.oldPosition);
+                                glm::vec3 relativeVelocity = p1.velocity - p2.velocity;
 
-                                // Calculate impulse
-                                float impulse = glm::dot(-(1.0f + 0.8f) * relativeVelocity, n) / (2.0f / PARTICLE_MASS);
+                                // Calculate relative velocity along the normal
+                                float velAlongNormal = glm::dot(relativeVelocity, collisionNormal);
 
-                                // Apply impulse (Newton's Third Law)
-                                glm::vec3 impulseVector = impulse * n;
-                                p1.oldPosition = p1.position - ((p1.position - p1.oldPosition) + impulseVector / PARTICLE_MASS);
-                                p2.oldPosition = p2.position - ((p2.position - p2.oldPosition) - impulseVector / PARTICLE_MASS);
+                                // Do not resolve if velocities are separating
+                                if (velAlongNormal > 0)
+                                    continue;
 
-                                // Separate particles
-                                p1.position -= n * delta;
-                                p2.position += n * delta;
+                                // Calculate restitution
+                                float e = COEFFICIENT_OF_RESTITUTION;
+
+                                // Calculate impulse scalar
+                                float j = -(1 + e) * velAlongNormal;
+                                j /= 1 / PARTICLE_MASS + 1 / PARTICLE_MASS;
+
+                                // Apply impulse
+                                glm::vec3 impulse = j * collisionNormal;
+                                p1.velocity += impulse / PARTICLE_MASS;
+                                p2.velocity -= impulse / PARTICLE_MASS;
+
+                                // Positional correction
+                                float percent = 0.2f; // usually 20% to 80%
+                                float slop = 0.01f; // usually 0.01 to 0.1
+                                glm::vec3 correction = glm::max(dist - (p1.radius + p2.radius) - slop, 0.0f) / (1/PARTICLE_MASS + 1/PARTICLE_MASS) * percent * collisionNormal;
+                                p1.position += correction / PARTICLE_MASS;
+                                p2.position -= correction / PARTICLE_MASS;
                             }
                         }
                     }
@@ -543,11 +594,8 @@ void calculateEnergy() {
 
     for (int i = 0; i < activeParticles; ++i) {
         if (particles[i].active) {
-            // Calculate velocity
-            glm::vec3 velocity = (particles[i].position - particles[i].oldPosition) / TIME_STEP;
-
             // Kinetic energy: 1/2 * m * v^2
-            kineticEnergy += 0.5f * PARTICLE_MASS * glm::dot(velocity, velocity);
+            kineticEnergy += 0.5f * PARTICLE_MASS * glm::dot(particles[i].velocity, particles[i].velocity);
 
             // Potential energy: m * g * h
             potentialEnergy += PARTICLE_MASS * std::abs(GRAVITY) * (particles[i].position.y + WORLD_RADIUS);
@@ -556,9 +604,10 @@ void calculateEnergy() {
 
     totalEnergy = kineticEnergy + potentialEnergy;
 
-    // Check for energy conservation (allowing for small numerical errors)
-    energyDifference = std::abs(totalEnergy - initialTotalEnergy);
+    // Calculate energy difference
+    energyDifference = totalEnergy - initialTotalEnergy;
 }
+
 
 std::string formatEnergy(float energy) {
     std::ostringstream oss;
