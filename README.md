@@ -17,7 +17,9 @@ This project demonstrates a simple OpenGL application using GLFW3 and GLEW. It c
       <img src="img/bigguy.png" alt="Second Image" title="big collision with a massive body" />
     </td>
   </tr>
+<td>
 </table>
+<center><img src="img/new_simulator.jpg" alt="Second Image" title="big collision with a massive body" /></center>
 
 ## Dependencies
 
@@ -28,7 +30,10 @@ This project requires the following libraries:
 - imgui (included in the project)
 - linmath.h (included in the project)
 
-## Building the Project
+## Controls
+
+- Camera control(mouse left click)
+- Repulsive force field(mouse right click)
 
 ### Prerequisites
 
