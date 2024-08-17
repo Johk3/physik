@@ -20,7 +20,7 @@ const int WINDOW_HEIGHT = 720;
 const float SPHERE_RADIUS = 0.05f;
 const float WORLD_RADIUS = 1.0f;
 const float GRAVITY = -9.81f;
-const int MAX_PARTICLES = 10000;
+const int MAX_PARTICLES = 100000;
 const int GRID_SIZE = 10;
 const float TIME_STEP = 0.016f; // 60 FPS
 const float SPAWN_INTERVAL = 0.001f; // Spawn a new particle every 0.1 seconds
@@ -30,6 +30,7 @@ const float PARTICLE_MASS = 0.1f; // Mass of each particle in kg
 const float MIN_VELOCITY = 0.0f;
 const float MAX_VELOCITY = 10.0f;
 const float COEFFICIENT_OF_RESTITUTION = 0.90f;
+const float CELL_SIZE = (2.0f * WORLD_RADIUS) / GRID_SIZE;
 
 // Camera constants
 const float CAMERA_INITIAL_DISTANCE = 5.0f;
@@ -609,7 +610,7 @@ void handleCollisions() {
                             glm::vec3 collisionAxis = p1.position - p2.position;
                             float dist = glm::length(collisionAxis);
 
-                            if (dist < p1.radius + p2.radius) {
+                            if (dist < p1.radius/5 + p2.radius/5) {
                                 glm::vec3 collisionNormal = glm::normalize(collisionAxis);
 
                                 // Calculate relative velocity
