@@ -9,6 +9,7 @@ find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
 find_package(OpenCL REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(glm REQUIRED)
 
 
 # Function to check for CPU features on macOS
@@ -97,7 +98,6 @@ set(HEADERS
         include/settings.h
         include/ThreadPool.h
         include/constants.h
-        include/linmath.h
 )
 
 set(SOURCES
@@ -131,6 +131,7 @@ target_link_libraries(physik
         glad::glad
         OpenCL::OpenCL
         OpenGL::GL
+        glm::glm
 )
 
 # Set compiler flags and definitions based on CPU support

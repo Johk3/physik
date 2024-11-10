@@ -1,8 +1,9 @@
 #include "../include/rendering.h"
 #include "../include/constants.h"
-#include "../include/linmath.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include "../include/settings.h"
-
 
 // Camera state
 struct Camera {
@@ -29,13 +30,13 @@ void drawSquare(const double x, const double y, const double r, const double g, 
     double screenX, screenY;
     worldToScreen(x, y, screenX, screenY);
 
-    mat4x4 mvp;
-    mat4x4_identity(mvp);
-    mat4x4_translate(mvp, x, y, 0.0f);
+    // Create model-view-projection matrix using GLM
+    glm::mat4 mvp = glm::mat4(1.0f); // Identity matrix
+    mvp = glm::translate(mvp, glm::vec3(x, y, 0.0f));
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glMultMatrixf((const GLfloat*)mvp);
+    glLoadMatrixf(glm::value_ptr(mvp));
 
     glColor4f(r, g, b, alpha);
     glPointSize(size);
@@ -95,14 +96,22 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // Set up the view
+    // Set up the view using GLM
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(-1.0 / camera.zoom, 1.0 / camera.zoom, -1.0 / camera.zoom, 1.0 / camera.zoom, -1.0, 1.0);
+
+    // Create orthographic projection matrix
+    glm::mat4 projection = glm::ortho(-1.0 / camera.zoom, 1.0 / camera.zoom,
+                                     -1.0 / camera.zoom, 1.0 / camera.zoom,
+                                     -1.0, 1.0);
+    glLoadMatrixf(glm::value_ptr(projection));
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    glTranslatef(-camera.x, -camera.y, 0.0f);
+
+    // Create view matrix
+    glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(-camera.x, -camera.y, 0.0f));
+    glLoadMatrixf(glm::value_ptr(view));
 
     // Draw all objects
     for (const auto& obj : all_objects) {
@@ -111,7 +120,7 @@ void render_screen(const std::vector<Object>& all_objects, GLFWwindow* window) {
 
     // Swap the back buffer with the front
     glfwSwapBuffers(window);
-};
+}
 
 // Mouse button callback
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {

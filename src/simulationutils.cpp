@@ -1,108 +1,34 @@
 #include "../include/simulationutils.h"
+#include <glm/glm.hpp>
+#include <glm/geometric.hpp>
 #include <iostream>
 #include "../include/settings.h"
-#ifdef USE_AVX2
-#include <immintrin.h>
-#endif
 #include <fstream>
 
-#ifdef USE_AVX2
-// Helper function to sum up a __m256d vector
-double _mm256_reduce_add_pd(__m256d v) {
-    __m128d vlow  = _mm256_castpd256_pd128(v);
-    __m128d vhigh = _mm256_extractf128_pd(v, 1);
-    vlow  = _mm_add_pd(vlow, vhigh);
-    __m128d high64 = _mm_unpackhi_pd(vlow, vlow);
-    return _mm_cvtsd_f64(_mm_add_sd(vlow, high64));
-}
-// SingleInstructionMultipleData Gravity using AVX architecture
-void calculate_gravity_simd(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-    const __m256d obj1_x = _mm256_set1_pd(object1.position.x);
-    const __m256d obj1_y = _mm256_set1_pd(object1.position.y);
-    const __m256d epsilon = _mm256_set1_pd(Settings::EPSILON);
-    const __m256d max_force = _mm256_set1_pd(Settings::g_MAX_FORCE);
-    const __m256d g_const = _mm256_set1_pd(Settings::g_G);
+void calculate_gravity(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
+    glm::vec2 acc(0.0f);
+    const glm::vec2 pos1 = glm::vec2(object1.position.x, object1.position.y);
 
-    __m256d acc_x = _mm256_setzero_pd();
-    __m256d acc_y = _mm256_setzero_pd();
-
-    for (size_t i = start; i < end; i += 4) {
-        __m256d obj2_x, obj2_y, mass;
-
-        if (i + 3 < end) {
-            obj2_x = _mm256_setr_pd(objects[i].position.x, objects[i+1].position.x, objects[i+2].position.x, objects[i+3].position.x);
-            obj2_y = _mm256_setr_pd(objects[i].position.y, objects[i+1].position.y, objects[i+2].position.y, objects[i+3].position.y);
-            mass = _mm256_setr_pd(objects[i].mass, objects[i+1].mass, objects[i+2].mass, objects[i+3].mass);
-        } else {
-            // Handle the last incomplete batch
-            double x_array[4] = {0}, y_array[4] = {0}, m_array[4] = {0};
-            for (size_t j = 0; j < end - i; ++j) {
-                x_array[j] = objects[i+j].position.x;
-                y_array[j] = objects[i+j].position.y;
-                m_array[j] = objects[i+j].mass;
-            }
-            obj2_x = _mm256_loadu_pd(x_array);
-            obj2_y = _mm256_loadu_pd(y_array);
-            mass = _mm256_loadu_pd(m_array);
-        }
-
-        __m256d dx = _mm256_sub_pd(obj2_x, obj1_x);
-        __m256d dy = _mm256_sub_pd(obj2_y, obj1_y);
-        __m256d r2 = _mm256_add_pd(_mm256_mul_pd(dx, dx), _mm256_mul_pd(dy, dy));
-        __m256d r = _mm256_sqrt_pd(r2);
-        __m256d r3 = _mm256_mul_pd(r, _mm256_mul_pd(r, r));
-
-        __m256d force = _mm256_div_pd(_mm256_mul_pd(g_const, mass), r3);
-        force = _mm256_min_pd(force, max_force);
-
-        __m256d mask = _mm256_cmp_pd(r2, epsilon, _CMP_GT_OQ);
-        force = _mm256_and_pd(force, mask);
-
-        acc_x = _mm256_add_pd(acc_x, _mm256_mul_pd(force, dx));
-        acc_y = _mm256_add_pd(acc_y, _mm256_mul_pd(force, dy));
-    }
-
-    // Sum up the vector components
-    double acc_x_sum = _mm256_reduce_add_pd(acc_x);
-    double acc_y_sum = _mm256_reduce_add_pd(acc_y);
-
-    // Set the final acceleration
-    object1.acceleration = {acc_x_sum, acc_y_sum};
-}
-#endif
-// Non-AVX version of gravity calculation
-void calculate_gravity_normal(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-    Vector2 acc = {0.0, 0.0};
     for (size_t i = start; i < end; ++i) {
         const auto& object2 = objects[i];
-        if (&object1 == &object2) continue;
-        if (object2.mass < Settings::EPSILON) continue;
+        if (&object1 == &object2 || object2.mass < Settings::EPSILON) continue;
 
-        Vector2 diff = object2.position - object1.position;
-        double r2 = diff.x * diff.x + diff.y * diff.y;
+        glm::vec2 pos2(object2.position.x, object2.position.y);
+        glm::vec2 diff = pos2 - pos1;
+        float r2 = glm::dot(diff, diff);
 
-        if (r2 < 1e-12) continue;
+        if (r2 < 1e-12f) continue;
 
-        double r = std::sqrt(r2);
+        float r = glm::sqrt(r2);
         if (r < 1e-6f) continue;
 
-        double force = 6.67430e-11 * object2.mass / (r2 * r);
-        double MAX_FORCE = 10000.0f;
-        force = std::min(force, MAX_FORCE);
+        float force = static_cast<float>(6.67430e-11 * object2.mass / (r2 * r));
+        force = glm::min(force, (float)Settings::g_MAX_FORCE);
 
-        acc = acc + diff * force;
+        acc += diff * force;
     }
-    object1.acceleration = acc;
-}
 
-
-// Function to choose between AVX and normal calculation
-void calculate_gravity(Object& object1, const std::vector<Object>& objects, size_t start, size_t end) {
-#ifdef USE_AVX2
-    calculate_gravity_simd(object1, objects, start, end);
-#else
-    calculate_gravity_normal(object1, objects, start, end);
-#endif
+    object1.acceleration = Vector2{acc.x, acc.y};
 }
 
 void updateObjectTrail(Object& obj) {
@@ -111,23 +37,20 @@ void updateObjectTrail(Object& obj) {
         return;
     }
 
-    const Vector2 lastPosition = obj.trail.back();
-    const Vector2 diff = obj.position - lastPosition;
-    double distance = diff.length();
+    const glm::vec2 currentPos(obj.position.x, obj.position.y);
+    const glm::vec2 lastPos(obj.trail.back().x, obj.trail.back().y);
+    const glm::vec2 diff = currentPos - lastPos;
+    float distance = glm::length(diff);
 
     if (distance >= obj.TRAIL_SPACING) {
-        // Calculate how many new dots we need to add
         const int numNewDots = static_cast<int>(distance / obj.TRAIL_SPACING);
+        const glm::vec2 direction = glm::normalize(diff);
 
         for (int i = 0; i < numNewDots; ++i) {
-            const double t = (i + 1) * obj.TRAIL_SPACING / distance;
-            Vector2 newDotPosition = {
-                lastPosition.x + diff.x * t,
-                lastPosition.y + diff.y * t
-            };
-            obj.trail.push_back(newDotPosition);
+            const float t = (i + 1) * obj.TRAIL_SPACING;
+            glm::vec2 newDotPosition = lastPos + direction * t;
+            obj.trail.push_back(Vector2{newDotPosition.x, newDotPosition.y});
 
-            // Remove oldest dot if we exceed the maximum trail length
             if (obj.trail.size() > obj.MAX_TRAIL_LENGTH) {
                 obj.trail.erase(obj.trail.begin());
             }
@@ -135,104 +58,108 @@ void updateObjectTrail(Object& obj) {
     }
 }
 
-// Check if two circular objects are overlapping
 bool checkCollision(const Object& obj1, const Object& obj2) {
-    const double distance = (obj1.position - obj2.position).length();
-    return distance <= (obj1.radius + obj2.radius);
+    const glm::vec2 pos1(obj1.position.x, obj1.position.y);
+    const glm::vec2 pos2(obj2.position.x, obj2.position.y);
+    return glm::distance(pos1, pos2) <= (obj1.radius + obj2.radius);
 }
 
 void handleCollision(Object& obj1, Object& obj2) {
-    // Calculate vector from obj1 to obj2
-    const Vector2 delta = obj2.position - obj1.position;
-    const float distance = delta.length();
+    const glm::vec2 pos1(obj1.position.x, obj1.position.y);
+    const glm::vec2 pos2(obj2.position.x, obj2.position.y);
+    const glm::vec2 vel1(obj1.velocity.x, obj1.velocity.y);
+    const glm::vec2 vel2(obj2.velocity.x, obj2.velocity.y);
 
-    // Normalize the delta vector
-    const Vector2 normal = delta.normal();
+    const glm::vec2 delta = pos2 - pos1;
+    const float distance = glm::length(delta);
 
-    // Calculate relative velocity
-    const Vector2 relativeVelocity = obj2.velocity - obj1.velocity;
+    // Early exit if objects are too far apart
+    if (distance > obj1.radius + obj2.radius) return;
 
-    // Calculate relative velocity along the normal using dot product
-    float velocityAlongNormal = relativeVelocity.dot(normal);
+    const glm::vec2 normal = glm::normalize(delta);
+    const glm::vec2 relativeVelocity = vel2 - vel1;
+    const float velocityAlongNormal = glm::dot(relativeVelocity, normal);
 
     // Do not resolve if velocities are separating
-    if (velocityAlongNormal > 0)
-        return;
+    if (velocityAlongNormal > 0) return;
 
-    // Calculate impulse scalar
-    float impulseScalar = - (1 + Settings::g_bounceFactor) * velocityAlongNormal;
-    impulseScalar /= 1 / obj1.mass  +  1 / obj2.mass;
+    const float restitution = Settings::g_bounceFactor;
+    float impulseScalar = -(1.0f + restitution) * velocityAlongNormal;
+    impulseScalar /= 1.0f / obj1.mass + 1.0f / obj2.mass;
 
-    // Apply impulse
-    Vector2 impulse = normal * impulseScalar;
+    const glm::vec2 impulse = normal * impulseScalar;
 
     // Update velocities
-    obj1.velocity.x -= impulse.x / obj1.mass;
-    obj1.velocity.y -= impulse.y / obj1.mass;
-    obj2.velocity.x += impulse.x / obj2.mass;
-    obj2.velocity.y += impulse.y / obj2.mass;
+    obj1.velocity = Vector2{
+        vel1.x - (impulse.x / obj1.mass),
+        vel1.y - (impulse.y / obj1.mass)
+    };
 
-    // Separate the objects to prevent overlapping
+    obj2.velocity = Vector2{
+        vel2.x + (impulse.x / obj2.mass),
+        vel2.y + (impulse.y / obj2.mass)
+    };
+
+    // Separate the objects
     const float overlap = (obj1.radius + obj2.radius) - distance;
     if (overlap > 0) {
-        Vector2 separationVector = normal * overlap;
+        const float totalMass = obj1.mass + obj2.mass;
+        const glm::vec2 separation = normal * overlap;
 
-        obj1.position.x -= separationVector.x * obj2.mass/(obj1.mass + obj2.mass);
-        obj1.position.y -= separationVector.y * obj2.mass/(obj1.mass + obj2.mass);
-        obj2.position.x += separationVector.x * obj1.mass/(obj1.mass + obj2.mass);
-        obj2.position.y += separationVector.y * obj1.mass/(obj1.mass + obj2.mass);
+        const glm::vec2 pos1New = pos1 - separation * ((float)obj2.mass / totalMass);
+        const glm::vec2 pos2New = pos2 + separation * ((float)obj1.mass / totalMass);
+
+        obj1.position = Vector2{pos1New.x, pos1New.y};
+        obj2.position = Vector2{pos2New.x, pos2New.y};
     }
 }
 
-// Helper function to read OpenCL kernel source
-std::string readKernelSource(const char* filename) {
-    std::ifstream file(filename);
-    return std::string(std::istreambuf_iterator<char>(file),
-                       std::istreambuf_iterator<char>());
-}
-
-
-
 void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, ThreadPool& pool, double delta_time) {
-    // CPU-based simulation update
     const size_t numObjects = allObjects.size();
     const size_t numThreads = pool.getThreadCount();
     const size_t batchSize = std::max(size_t(1), numObjects / (numThreads * 4));
+    const float dt = static_cast<float>(delta_time);
 
     // Step 1: Gravity Calculation
-    std::vector<std::future<void>> gravityfutures;
+    std::vector<std::future<void>> futures;
     for (size_t i = 0; i < numObjects; i += batchSize) {
         size_t end = std::min(i + batchSize, numObjects);
-        gravityfutures.push_back(pool.enqueue([&allObjects, i, end]() {
+        futures.push_back(pool.enqueue([&allObjects, i, end]() {
             for (size_t j = i; j < end; ++j) {
                 calculate_gravity(allObjects[j], allObjects, 0, allObjects.size());
             }
         }));
     }
 
-    // Wait for gravity calculations to complete
-    for (auto& future : gravityfutures) {
+    for (auto& future : futures) {
         future.get();
     }
+    futures.clear();
 
     // Step 2: Update positions and trails
-    std::vector<std::future<void>> updateFutures;
     for (size_t i = 0; i < numObjects; i += batchSize) {
         size_t end = std::min(i + batchSize, numObjects);
-        updateFutures.push_back(pool.enqueue([&allObjects, i, end, delta_time]() {
+        futures.push_back(pool.enqueue([&allObjects, i, end, dt]() {
             for (size_t j = i; j < end; ++j) {
                 Object& obj = allObjects[j];
-                obj.velocity = obj.velocity + obj.acceleration * delta_time;
-                obj.position = obj.position + obj.velocity * delta_time;
+                glm::vec2 vel(obj.velocity.x, obj.velocity.y);
+                glm::vec2 acc(obj.acceleration.x, obj.acceleration.y);
+                glm::vec2 pos(obj.position.x, obj.position.y);
+
+                vel += acc * dt;
+                pos += vel * dt;
+
+                obj.velocity = Vector2{vel.x, vel.y};
+                obj.position = Vector2{pos.x, pos.y};
                 updateObjectTrail(obj);
             }
         }));
     }
 
-    // Wait for position updates to complete
-    for (auto& future : updateFutures) {
+    for (auto& future : futures) {
         future.get();
     }
+    futures.clear();
 
     // Step 3: Rebuild spatial grid
     grid.clear();
@@ -241,10 +168,9 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
     }
 
     // Step 4: Handle collisions
-    std::vector<std::future<void>> collisionFutures;
     for (size_t i = 0; i < numObjects; i += batchSize) {
         size_t end = std::min(i + batchSize, numObjects);
-        collisionFutures.push_back(pool.enqueue([&allObjects, &grid, i, end]() {
+        futures.push_back(pool.enqueue([&allObjects, &grid, i, end]() {
             for (size_t j = i; j < end; ++j) {
                 auto neighbors = grid.getNeighbors(allObjects[j]);
                 for (auto* neighbor : neighbors) {
@@ -256,41 +182,39 @@ void updateSimulation(std::vector<Object>& allObjects, SpatialGrid& grid, Thread
         }));
     }
 
-    // Wait for collision handling to complete
-    for (auto& future : collisionFutures) {
+    for (auto& future : futures) {
         future.get();
     }
 }
 
-
-
 std::vector<Object> get_objects() {
     std::vector<Object> allObjects;
+    allObjects.reserve(626); // Pre-allocate space for all objects (25*25 + 1)
 
-    // Create and add objects
+    // Create grid of objects
     for (int i = 0; i < 25; i++) {
         for (int j = 0; j < 25; j++) {
-            const float r = float(i) / (24.0f * 0.9f) + 0.10f;
-            const float g = float(j) / (24.0f * 0.9f) + 0.10f;
-            const float b = 1.0f - (float(i + j) / (48.0f * 0.9f) + 0.10f);
+            const float r = glm::mix(0.1f, 1.0f, float(i) / 24.0f);
+            const float g = glm::mix(0.1f, 1.0f, float(j) / 24.0f);
+            const float b = glm::mix(0.1f, 1.0f, 1.0f - float(i + j) / 48.0f);
 
             allObjects.emplace_back(
-                Vector2{-0.5f + i * 0.04f, j * 0.04f},  // position
-                Vector2{0.2f, 0.0f},                    // velocity
-                1e4,                                    // mass
-                0.1,                                    // density
-                r, g, b                                 // color
+                Vector2{-0.5f + i * 0.04f, j * 0.04f},
+                Vector2{0.2f, 0.0f},
+                1e4,
+                0.1,
+                r, g, b
             );
         }
     }
 
-    // Add a larger central object
+    // Add central object
     allObjects.emplace_back(
-        Vector2{0.02f, 0.0001f},  // position
-        Vector2{0.2f, 0.0f},    // velocity
-        5e14,                   // mass
-        5e6,                    // density
-        1.0f, 1.0f, 1.0f        // color (white)
+        Vector2{0.02f, 0.0001f},
+        Vector2{0.2f, 0.0f},
+        5e14,
+        5e6,
+        1.0f, 1.0f, 1.0f
     );
 
     return allObjects;
