@@ -7,9 +7,8 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(glfw3 REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glad REQUIRED)
+find_package(glm REQUIRED)
 
-# Add GLM as a subdirectory
-add_subdirectory(glm)
 
 # Check AVX Support
 include(CheckCXXSourceRuns)
@@ -74,7 +73,6 @@ add_executable(physik
 target_include_directories(physik PRIVATE
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
-        ${CMAKE_CURRENT_SOURCE_DIR}/glm
 )
 
 # Link libraries
